@@ -39,7 +39,7 @@ export function ManagePanel({ ticket }: { ticket: Ticket }) {
   }
 
   return (
-    <section className="card manage" aria-label="Manage ticket">
+    <section className="manage" aria-label="Manage ticket">
       <h2>Manage</h2>
       <ErrorMessage error={action.error ?? agents.error} />
 
@@ -150,26 +150,28 @@ function OverrideForm({ ticket, disabled, onSave }: OverrideFormProps) {
 
   return (
     <form onSubmit={handleSubmit}>
-      <label>
-        Category
-        <select value={category} onChange={(e) => setCategory(e.target.value as TicketCategory)}>
-          {CATEGORIES.map((option) => (
-            <option key={option} value={option}>
-              {label(option)}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        Priority
-        <select value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority)}>
-          {PRIORITIES.map((option) => (
-            <option key={option} value={option}>
-              {label(option)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div className="field-pair">
+        <label>
+          Category
+          <select value={category} onChange={(e) => setCategory(e.target.value as TicketCategory)}>
+            {CATEGORIES.map((option) => (
+              <option key={option} value={option}>
+                {label(option)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Priority
+          <select value={priority} onChange={(e) => setPriority(e.target.value as TicketPriority)}>
+            {PRIORITIES.map((option) => (
+              <option key={option} value={option}>
+                {label(option)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
       <div>
         <button type="submit" disabled={disabled || !changed}>
           Save override

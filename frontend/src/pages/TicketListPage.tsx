@@ -1,12 +1,18 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { Plus } from 'lucide-react'
 import { Link, useSearchParams } from 'react-router'
 import { api } from '../api/endpoints.ts'
 import type { TicketFilters } from '../api/endpoints.ts'
 import { CATEGORIES, PRIORITIES, STATUSES } from '../api/types.ts'
 import { isStaff, useCurrentUser } from '../auth/useAuth.ts'
-import { ClassifierBadge, PriorityBadge, SlaBadge, StatusBadge } from '../components/Badges.tsx'
+import { ClassifierBadge, Person, PriorityBadge, StatusBadge } from '../components/Badges.tsx'
 import { ErrorMessage } from '../components/ErrorMessage.tsx'
+import { SkeletonRows } from '../components/Skeleton.tsx'
+import { SlaMeter } from '../components/SlaMeter.tsx'
+import { useNow } from '../components/useNow.ts'
 import { count, formatDate, label } from '../format.ts'
+
+const REFRESH_MS = 60_000
 
 const SORTS = [
   { value: 'createdAt,desc', name: 'Newest first' },
@@ -17,6 +23,7 @@ const SORTS = [
 export function TicketListPage() {
   const user = useCurrentUser()
   const staff = isStaff(user)
+  const now = useNow()
   const [params, setParams] = useSearchParams()
   const page = Number.parseInt(params.get('page') ?? '', 10) || 1
   const mine = staff && params.get('mine') === '1'
@@ -35,6 +42,7 @@ export function TicketListPage() {
     queryKey: ['tickets', filters],
     queryFn: () => api.listTickets(filters),
     placeholderData: keepPreviousData,
+    refetchInterval: REFRESH_MS,
   })
 
   function setFilter(name: string, value: string) {
@@ -64,11 +72,12 @@ export function TicketListPage() {
       <div className="page-heading">
         <h1>{staff ? 'All tickets' : 'My tickets'}</h1>
         <Link className="button" to="/tickets/new">
+          <Plus size={15} aria-hidden="true" />
           New ticket
         </Link>
       </div>
 
-      <section className="filters" aria-label="Filters">
+      <section className="toolbar" aria-label="Filters">
         <FilterSelect name="status" title="Status" options={STATUSES} value={filters.status} onChange={setFilter} />
         <FilterSelect
           name="priority"
@@ -95,13 +104,13 @@ export function TicketListPage() {
           </select>
         </label>
         {staff && (
-          <label className="checkbox">
+          <label className="toggle">
             <input type="checkbox" checked={mine} onChange={(e) => setFilter('mine', e.target.checked ? '1' : '')} />
             My queue
           </label>
         )}
         {staff && (
-          <label className="checkbox">
+          <label className="toggle">
             <input
               type="checkbox"
               checked={overdue}
@@ -113,39 +122,34 @@ export function TicketListPage() {
       </section>
 
       <ErrorMessage error={tickets.error} />
-      {tickets.isPending && <p className="status-text">Loading tickets…</p>}
+      {tickets.isPending && <SkeletonRows label="Loading tickets…" />}
 
       {tickets.data && tickets.data.content.length === 0 && (
-        <p className="status-text card">No tickets match these filters.</p>
+        <div className="table-wrap empty">
+          <strong>No tickets match these filters.</strong>
+          <span>{staff ? 'Change a filter to see more.' : 'When you report a problem, it will show up here.'}</span>
+        </div>
       )}
 
       {tickets.data && tickets.data.content.length > 0 && (
         <>
-          <div className="card table-card">
-            <table>
+          <div className="table-wrap" aria-busy={tickets.isPlaceholderData}>
+            <table className="queue">
               <thead>
                 <tr>
-                  <th scope="col">#</th>
+                  <th scope="col" className="col-medium">
+                    #
+                  </th>
                   <th scope="col">Title</th>
                   <th scope="col">Status</th>
                   <th scope="col">Priority</th>
-                  <th scope="col" className="wide-only">
-                    SLA
-                  </th>
-                  <th scope="col" className="wide-only">
-                    Category
-                  </th>
+                  <th scope="col">SLA</th>
                   {staff && (
-                    <th scope="col" className="wide-only">
-                      Requester
-                    </th>
-                  )}
-                  {staff && (
-                    <th scope="col" className="wide-only">
+                    <th scope="col" className="col-wide">
                       Assignee
                     </th>
                   )}
-                  <th scope="col" className="wide-only">
+                  <th scope="col" className="col-wide">
                     Created
                   </th>
                 </tr>
@@ -153,9 +157,14 @@ export function TicketListPage() {
               <tbody>
                 {tickets.data.content.map((ticket) => (
                   <tr key={ticket.id}>
-                    <td className="muted">{ticket.id}</td>
+                    <td className="ticket-id mono col-medium">{ticket.id}</td>
                     <td className="title-cell">
                       <Link to={`/tickets/${ticket.id}`}>{ticket.title}</Link>
+                      <div className="title-meta">
+                        <span>{label(ticket.category)}</span>
+                        <ClassifierBadge source={ticket.classifiedBy} />
+                        {staff && <span className="col-medium">{ticket.requesterEmail}</span>}
+                      </div>
                     </td>
                     <td>
                       <StatusBadge status={ticket.status} />
@@ -163,15 +172,15 @@ export function TicketListPage() {
                     <td>
                       <PriorityBadge priority={ticket.priority} />
                     </td>
-                    <td className="wide-only">
-                      <SlaBadge state={ticket.slaState} />
+                    <td>
+                      <SlaMeter state={ticket.slaState} createdAt={ticket.createdAt} dueAt={ticket.slaDueAt} now={now} />
                     </td>
-                    <td className="wide-only">
-                      {label(ticket.category)} <ClassifierBadge source={ticket.classifiedBy} />
-                    </td>
-                    {staff && <td className="wide-only">{ticket.requesterEmail}</td>}
-                    {staff && <td className="wide-only">{ticket.assigneeEmail ?? <span className="muted">None</span>}</td>}
-                    <td className="wide-only nowrap">{formatDate(ticket.createdAt)}</td>
+                    {staff && (
+                      <td className="col-wide assignee">
+                        {ticket.assigneeEmail ? <Person email={ticket.assigneeEmail} /> : <span className="muted">None</span>}
+                      </td>
+                    )}
+                    <td className="col-wide mono muted">{formatDate(ticket.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -182,7 +191,7 @@ export function TicketListPage() {
             <button type="button" className="button-quiet" disabled={page <= 1} onClick={() => goToPage(page - 1)}>
               Previous
             </button>
-            <span className="muted">
+            <span>
               Page {page} of {Math.max(tickets.data.totalPages, 1)} · {count(tickets.data.totalElements, 'ticket')}
             </span>
             <button

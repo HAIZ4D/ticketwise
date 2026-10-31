@@ -9,7 +9,7 @@ export function DuplicatesPanel({ ticketId }: { ticketId: string }) {
     return null
   }
   return (
-    <section className="card" aria-label="Possible duplicates">
+    <section aria-label="Possible duplicates">
       <h2>Possible duplicates</h2>
       <SimilarTicketList tickets={duplicates.data} />
     </section>

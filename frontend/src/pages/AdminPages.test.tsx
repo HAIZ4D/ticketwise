@@ -1,19 +1,19 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 import App from '../App.tsx'
 import { Failure, aPage, admin, employee, logInAs, renderPage } from '../test/utils.tsx'
 
 describe('stats page', () => {
-  it('shows a card for every count', async () => {
-    logInAs(admin, {
-      'GET /stats': {
-        byStatus: { OPEN: 3, IN_PROGRESS: 2, RESOLVED: 1, CLOSED: 0 },
-        byPriority: { LOW: 1, MEDIUM: 2, HIGH: 2, CRITICAL: 1 },
-        byCategory: { NETWORK: 4, HARDWARE: 1, SOFTWARE: 1, ACCESS: 0, EMAIL: 0, OTHER: 0 },
-        overdue: 9,
-      },
-    })
+  const stats = {
+    byStatus: { OPEN: 3, IN_PROGRESS: 2, RESOLVED: 1, CLOSED: 0 },
+    byPriority: { LOW: 1, MEDIUM: 2, HIGH: 2, CRITICAL: 1 },
+    byCategory: { NETWORK: 4, HARDWARE: 1, SOFTWARE: 1, ACCESS: 0, EMAIL: 0, OTHER: 0 },
+    overdue: 9,
+  }
+
+  it('shows every count', async () => {
+    logInAs(admin, { 'GET /stats': stats })
 
     renderPage(<App />, '/stats')
 
@@ -23,6 +23,32 @@ describe('stats page', () => {
     expect(screen.getByText('Network')).toBeInTheDocument()
     expect(screen.getByText('4')).toBeInTheDocument()
     expect(screen.getByText('Critical')).toBeInTheDocument()
+  })
+
+  it('puts the most urgent priority and the biggest category first', async () => {
+    logInAs(admin, { 'GET /stats': { ...stats, byCategory: { ...stats.byCategory, EMAIL: 6 } } })
+    renderPage(<App />, '/stats')
+
+    async function rows(title: string) {
+      const chart = (await screen.findByRole('heading', { name: title })).closest('section') as HTMLElement
+      return within(chart)
+        .getAllByRole('listitem')
+        .map((row) => row.textContent)
+    }
+
+    expect(await rows('By priority')).toEqual(['Critical1', 'High2', 'Medium2', 'Low1'])
+    expect((await rows('By category'))[0]).toBe('Email6')
+  })
+
+  it.each([
+    [1, 'open ticket past its target'],
+    [2, 'open tickets past their target'],
+  ])('words an overdue count of %i correctly', async (overdue, sentence) => {
+    logInAs(admin, { 'GET /stats': { ...stats, overdue } })
+
+    renderPage(<App />, '/stats')
+
+    expect(await screen.findByText(sentence)).toBeInTheDocument()
   })
 })
 

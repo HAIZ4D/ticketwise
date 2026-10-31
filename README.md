@@ -8,7 +8,7 @@ An IT helpdesk built with Java and Spring Boot. Employees report IT problems in 
 
 ## What it does
 
-- **React dashboard:** a ticket list with filters, ticket pages with comments and history, a create form, and stats and user screens for admins.
+- **React dashboard:** a ticket queue with filters and live SLA countdowns, ticket pages with one activity timeline, a create form, and stats and user screens for admins, in light and dark themes.
 - **Accounts and roles:** log in with a JWT. Employees see only their own tickets, while agents and admins manage all of them.
 - **Tickets:** create, list, view, assign and change status. Invalid status moves are rejected.
 - **AI classification:** Gemini suggests a category, priority and a one-line reason for each new ticket.

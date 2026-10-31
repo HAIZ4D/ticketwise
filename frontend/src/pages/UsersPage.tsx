@@ -4,7 +4,9 @@ import { api } from '../api/endpoints.ts'
 import { ROLES } from '../api/types.ts'
 import type { UserRole } from '../api/types.ts'
 import { useCurrentUser } from '../auth/useAuth.ts'
+import { Avatar } from '../components/Badges.tsx'
 import { ErrorMessage } from '../components/ErrorMessage.tsx'
+import { SkeletonRows } from '../components/Skeleton.tsx'
 import { count, formatDate, label } from '../format.ts'
 
 export function UsersPage() {
@@ -29,16 +31,16 @@ export function UsersPage() {
       <title>Users · TicketWise</title>
       <h1>Users</h1>
       <ErrorMessage error={users.error ?? changeRole.error} />
-      {users.isPending && <p className="status-text">Loading users…</p>}
+      {users.isPending && <SkeletonRows label="Loading users…" rows={4} />}
       {users.data && (
         <>
-          <div className="card table-card">
+          <div className="table-wrap">
             <table>
               <thead>
                 <tr>
                   <th scope="col">Email</th>
                   <th scope="col">Role</th>
-                  <th scope="col" className="wide-only">
+                  <th scope="col" className="col-medium">
                     Joined
                   </th>
                 </tr>
@@ -47,9 +49,14 @@ export function UsersPage() {
                 {users.data.content.map((user) => (
                   <tr key={user.id}>
                     <td className="title-cell">
-                      {user.email} {user.id === currentUser.id && <span className="muted">(you)</span>}
+                      <span className="person-row">
+                        <Avatar email={user.email} />
+                        <span>
+                          {user.email} {user.id === currentUser.id && <span className="muted">(you)</span>}
+                        </span>
+                      </span>
                     </td>
-                    <td>
+                    <td className="role-cell">
                       <select
                         aria-label={`Role for ${user.email}`}
                         value={user.role}
@@ -63,7 +70,7 @@ export function UsersPage() {
                         ))}
                       </select>
                     </td>
-                    <td className="wide-only nowrap">{formatDate(user.createdAt)}</td>
+                    <td className="col-medium mono muted">{formatDate(user.createdAt)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -73,7 +80,7 @@ export function UsersPage() {
             <button type="button" className="button-quiet" disabled={page === 0} onClick={() => setPage(page - 1)}>
               Previous
             </button>
-            <span className="muted">
+            <span>
               Page {page + 1} of {Math.max(users.data.totalPages, 1)} · {count(users.data.totalElements, 'user')}
             </span>
             <button

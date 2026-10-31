@@ -8,7 +8,7 @@ export function SuggestionPanel({ ticketId }: { ticketId: string }) {
   const suggest = useMutation({ mutationFn: () => api.suggestFix(ticketId) })
 
   return (
-    <section className="card" aria-label="Suggested fix">
+    <section aria-label="Suggested fix">
       <h2>Suggested fix</h2>
       <p className="muted">Based on how similar tickets were solved.</p>
       <div>

@@ -178,7 +178,7 @@ describe('managing a ticket', () => {
   it('refreshes the history after a change', async () => {
     const api = openTicket(agent, aTicket(), { 'PATCH /tickets/7/status': aTicket({ status: 'CLOSED', nextStatuses: [] }) })
     const panel = await managePanel()
-    await screen.findByText('No changes yet.')
+    await screen.findByText('No activity yet.')
 
     await userEvent.setup().click(panel.getByRole('button', { name: 'Closed' }))
 
@@ -364,12 +364,22 @@ describe('similar tickets', () => {
 })
 
 describe('comments and history', () => {
+  it('shows a comment as plain text, never as HTML', async () => {
+    const attack = '<img src=x onerror=alert(1)>'
+    openTicket(employee, aTicket(), {
+      'GET /tickets/7/comments': [{ id: 1, authorEmail: agent.email, body: attack, createdAt: '2026-11-01T11:00:00Z' }],
+    })
+
+    expect(await screen.findByText(attack)).toBeInTheDocument()
+    expect(document.querySelector('img')).toBeNull()
+  })
+
   it('adds a comment, sending only the text', async () => {
     const api = openTicket(employee, aTicket(), {
       'POST /tickets/7/comments': { id: 1, authorEmail: employee.email, body: 'Any update?', createdAt: '2026-11-01T11:00:00Z' },
     })
     const user = userEvent.setup()
-    await screen.findByText('No comments yet.')
+    await screen.findByText('No activity yet.')
 
     await user.type(screen.getByLabelText('Add a comment'), 'Any update?')
     await user.click(screen.getByRole('button', { name: 'Add comment' }))
@@ -398,5 +408,24 @@ describe('comments and history', () => {
 
     expect(await screen.findByText('Status: Open → In progress')).toBeInTheDocument()
     expect(screen.getByText(`Assignee: None → ${agent.email}`)).toBeInTheDocument()
+  })
+
+  it('merges comments and changes into one timeline, oldest first', async () => {
+    openTicket(employee, aTicket(), {
+      'GET /tickets/7/comments': [
+        { id: 1, authorEmail: agent.email, body: 'Second event', createdAt: '2026-11-01T11:05:00Z' },
+      ],
+      'GET /tickets/7/history': [
+        { id: 1, field: 'status', oldValue: 'OPEN', newValue: 'IN_PROGRESS', changedBy: agent.email, changedAt: '2026-11-01T11:00:00Z' },
+        { id: 2, field: 'status', oldValue: 'IN_PROGRESS', newValue: 'OPEN', changedBy: agent.email, changedAt: '2026-11-01T11:10:00Z' },
+      ],
+    })
+
+    await screen.findByText('Second event')
+    const events = within(screen.getByRole('list', { name: '' })).getAllByRole('listitem')
+
+    expect(events[0]).toHaveTextContent('Status: Open → In progress')
+    expect(events[1]).toHaveTextContent('Second event')
+    expect(events[2]).toHaveTextContent('Status: In progress → Open')
   })
 })

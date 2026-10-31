@@ -24,10 +24,13 @@ export function NewTicketPage() {
   }
 
   return (
-    <>
+    <div className="narrow page-stack">
       <title>New ticket · TicketWise</title>
-      <h1>Report a problem</h1>
-      <form className="card narrow" onSubmit={handleSubmit}>
+      <div>
+        <h1>Report a problem</h1>
+        <p className="muted">Describe it in your own words. It will be sorted by category and priority for you.</p>
+      </div>
+      <form onSubmit={handleSubmit}>
         <label>
           Title
           <input
@@ -59,6 +62,6 @@ export function NewTicketPage() {
           </button>
         </div>
       </form>
-    </>
+    </div>
   )
 }

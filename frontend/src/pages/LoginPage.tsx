@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate, useLocation } from 'react-router'
 import { useAuth } from '../auth/useAuth.ts'
+import { AuthLayout } from '../components/AuthLayout.tsx'
 import { ErrorMessage } from '../components/ErrorMessage.tsx'
 
 export function LoginPage() {
@@ -22,10 +23,12 @@ export function LoginPage() {
   }
 
   return (
-    <main className="auth">
+    <AuthLayout>
       <title>Log in · TicketWise</title>
-      <h1>TicketWise</h1>
-      <p className="muted">Log in to report and track IT problems.</p>
+      <header>
+        <h1>Welcome back</h1>
+        <p className="muted">Log in to report and track IT problems.</p>
+      </header>
       <form onSubmit={handleSubmit}>
         <label>
           Email
@@ -49,6 +52,6 @@ export function LoginPage() {
       <p className="muted">
         New here? <Link to="/register">Create an account</Link>
       </p>
-    </main>
+    </AuthLayout>
   )
 }

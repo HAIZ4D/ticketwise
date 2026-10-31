@@ -3,6 +3,7 @@ import { useState } from 'react'
 import type { FormEvent } from 'react'
 import { Link, Navigate } from 'react-router'
 import { useAuth } from '../auth/useAuth.ts'
+import { AuthLayout } from '../components/AuthLayout.tsx'
 import { ErrorMessage } from '../components/ErrorMessage.tsx'
 
 export function RegisterPage() {
@@ -21,10 +22,12 @@ export function RegisterPage() {
   }
 
   return (
-    <main className="auth">
+    <AuthLayout>
       <title>Create an account · TicketWise</title>
-      <h1>Create an account</h1>
-      <p className="muted">You'll be able to report problems and track your tickets.</p>
+      <header>
+        <h1>Create an account</h1>
+        <p className="muted">You'll be able to report problems and track your tickets.</p>
+      </header>
       <form onSubmit={handleSubmit}>
         <label>
           Email
@@ -52,6 +55,6 @@ export function RegisterPage() {
       <p className="muted">
         Already have an account? <Link to="/login">Log in</Link>
       </p>
-    </main>
+    </AuthLayout>
   )
 }
