@@ -18,8 +18,8 @@ gemini:
   base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
 
 similarity:
-  duplicate-threshold: 0.85
-  solved-threshold: 0.6
+  duplicate-threshold: 0.9
+  solved-threshold: 0.82
   max-results: 3
   job-batch-size: 10
   job-delay-ms: 60000
