@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -28,6 +29,21 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 	public ResponseEntity<ApiError> handleInvalidTransition(InvalidStatusTransitionException ex,
 			HttpServletRequest request) {
 		return respond(HttpStatus.CONFLICT, ex.getMessage(), request);
+	}
+
+	@ExceptionHandler(EmailAlreadyUsedException.class)
+	public ResponseEntity<ApiError> handleEmailAlreadyUsed(EmailAlreadyUsedException ex, HttpServletRequest request) {
+		return respond(HttpStatus.CONFLICT, ex.getMessage(), request);
+	}
+
+	@ExceptionHandler(BadRequestException.class)
+	public ResponseEntity<ApiError> handleBadRequest(BadRequestException ex, HttpServletRequest request) {
+		return respond(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+	}
+
+	@ExceptionHandler(AuthenticationException.class)
+	public ResponseEntity<ApiError> handleBadLogin(AuthenticationException ex, HttpServletRequest request) {
+		return respond(HttpStatus.UNAUTHORIZED, "Invalid email or password", request);
 	}
 
 	@ExceptionHandler(PropertyReferenceException.class)

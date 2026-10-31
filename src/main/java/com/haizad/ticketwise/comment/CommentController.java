@@ -4,8 +4,10 @@ import java.util.List;
 
 import com.haizad.ticketwise.comment.dto.CommentResponse;
 import com.haizad.ticketwise.comment.dto.CreateCommentRequest;
+import com.haizad.ticketwise.user.User;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,14 +27,15 @@ public class CommentController {
 	}
 
 	@GetMapping
-	public List<CommentResponse> list(@PathVariable long ticketId) {
-		return commentService.list(ticketId);
+	public List<CommentResponse> list(@PathVariable long ticketId, @AuthenticationPrincipal User user) {
+		return commentService.list(ticketId, user);
 	}
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	public CommentResponse add(@PathVariable long ticketId, @Valid @RequestBody CreateCommentRequest request) {
-		return commentService.add(ticketId, request);
+	public CommentResponse add(@PathVariable long ticketId, @Valid @RequestBody CreateCommentRequest request,
+			@AuthenticationPrincipal User user) {
+		return commentService.add(ticketId, request, user);
 	}
 
 }

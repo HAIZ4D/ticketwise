@@ -5,13 +5,17 @@ import java.time.Instant;
 import com.haizad.ticketwise.classification.ClassificationResult;
 import com.haizad.ticketwise.classification.ClassifierSource;
 import com.haizad.ticketwise.common.InvalidStatusTransitionException;
+import com.haizad.ticketwise.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -30,8 +34,9 @@ public class Ticket {
 	@Column(nullable = false, length = 2000)
 	private String description;
 
-	@Column(nullable = false)
-	private String requesterEmail;
+	@ManyToOne(fetch = FetchType.LAZY, optional = false)
+	@JoinColumn(name = "requester_id", nullable = false)
+	private User requester;
 
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -63,7 +68,9 @@ public class Ticket {
 	@Column(nullable = false)
 	private boolean overridden;
 
-	private String assigneeEmail;
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "assignee_id")
+	private User assignee;
 
 	@Column(nullable = false)
 	private Instant createdAt;
@@ -76,12 +83,20 @@ public class Ticket {
 	protected Ticket() {
 	}
 
-	public Ticket(String title, String description, String requesterEmail, ClassificationResult classification) {
+	public Ticket(String title, String description, User requester, ClassificationResult classification) {
 		this.title = title;
 		this.description = description;
-		this.requesterEmail = requesterEmail;
+		this.requester = requester;
 		this.status = TicketStatus.OPEN;
 		applyClassification(classification);
+	}
+
+	public boolean isVisibleTo(User user) {
+		return user.isStaff() || requester.getId().equals(user.getId());
+	}
+
+	public void assignTo(User newAssignee) {
+		assignee = newAssignee;
 	}
 
 	public void moveTo(TicketStatus next) {
@@ -145,8 +160,8 @@ public class Ticket {
 		return description;
 	}
 
-	public String getRequesterEmail() {
-		return requesterEmail;
+	public User getRequester() {
+		return requester;
 	}
 
 	public TicketStatus getStatus() {
@@ -181,8 +196,8 @@ public class Ticket {
 		return overridden;
 	}
 
-	public String getAssigneeEmail() {
-		return assigneeEmail;
+	public User getAssignee() {
+		return assignee;
 	}
 
 	public Instant getCreatedAt() {

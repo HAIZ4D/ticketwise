@@ -6,20 +6,25 @@ import java.util.Map;
 import com.haizad.ticketwise.classification.ClassificationResult;
 import com.haizad.ticketwise.classification.ClassifierSource;
 import com.haizad.ticketwise.classification.TicketClassifier;
+import com.haizad.ticketwise.common.BadRequestException;
 import com.haizad.ticketwise.common.InvalidStatusTransitionException;
 import com.haizad.ticketwise.history.HistoryService;
+import com.haizad.ticketwise.ticket.dto.AssignRequest;
 import com.haizad.ticketwise.ticket.dto.CreateTicketRequest;
 import com.haizad.ticketwise.ticket.dto.OverrideRequest;
-import com.haizad.ticketwise.ticket.dto.ReclassifyRequest;
 import com.haizad.ticketwise.ticket.dto.TicketResponse;
 import com.haizad.ticketwise.ticket.dto.TicketStatsResponse;
 import com.haizad.ticketwise.ticket.dto.UpdateStatusRequest;
+import com.haizad.ticketwise.user.User;
+import com.haizad.ticketwise.user.UserRepository;
+import com.haizad.ticketwise.user.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -27,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -42,9 +48,7 @@ class TicketServiceTest {
 
 	private static final String DESCRIPTION = "My VPN drops every 10 minutes";
 
-	private static final String REQUESTER = "aina@example.com";
-
-	private static final String AGENT = "agent@example.com";
+	private static final String AGENT_EMAIL = "agent@example.com";
 
 	private static final ClassificationResult NETWORK_HIGH = new ClassificationResult(TicketCategory.NETWORK,
 			TicketPriority.HIGH, "VPN drops block work.", ClassifierSource.GEMINI);
@@ -52,8 +56,15 @@ class TicketServiceTest {
 	private static final ClassificationResult EMAIL_LOW = new ClassificationResult(TicketCategory.EMAIL,
 			TicketPriority.LOW, "A second opinion.", ClassifierSource.RULES);
 
+	private final User employee = user(1L, "aina@example.com", UserRole.EMPLOYEE);
+
+	private final User agent = user(2L, AGENT_EMAIL, UserRole.AGENT);
+
 	@Mock
 	private TicketRepository ticketRepository;
+
+	@Mock
+	private UserRepository userRepository;
 
 	@Mock
 	private TicketClassifier classifier;
@@ -70,17 +81,19 @@ class TicketServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		ticketService = new TicketService(ticketRepository, classifier, historyService, transactionTemplate);
-		ticket = new Ticket(TITLE, DESCRIPTION, REQUESTER, NETWORK_HIGH);
+		ticketService = new TicketService(ticketRepository, userRepository, classifier, historyService,
+				transactionTemplate);
+		ticket = new Ticket(TITLE, DESCRIPTION, employee, NETWORK_HIGH);
 	}
 
 	@Test
-	void createSavesTheClassifierResult() {
+	void createSavesTheClassifierResultForTheLoggedInUser() {
 		when(classifier.classify(TITLE, DESCRIPTION)).thenReturn(NETWORK_HIGH);
 		when(ticketRepository.save(any())).then(returnsFirstArg());
 
-		TicketResponse response = ticketService.create(new CreateTicketRequest(TITLE, DESCRIPTION, REQUESTER));
+		TicketResponse response = ticketService.create(new CreateTicketRequest(TITLE, DESCRIPTION), employee);
 
+		assertThat(response.requesterEmail()).isEqualTo("aina@example.com");
 		assertThat(response.status()).isEqualTo(TicketStatus.OPEN);
 		assertThat(response.aiCategory()).isEqualTo(TicketCategory.NETWORK);
 		assertThat(response.aiPriority()).isEqualTo(TicketPriority.HIGH);
@@ -92,21 +105,21 @@ class TicketServiceTest {
 	}
 
 	@Test
-	void changeStatusWritesHistory() {
-		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
-		when(ticketRepository.saveAndFlush(ticket)).thenReturn(ticket);
+	void changeStatusWritesHistoryUnderTheLoggedInUser() {
+		givenTicketCanBeSaved();
 
-		TicketResponse response = ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.IN_PROGRESS, AGENT));
+		TicketResponse response = ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.IN_PROGRESS),
+				agent);
 
 		assertThat(response.status()).isEqualTo(TicketStatus.IN_PROGRESS);
-		verify(historyService).recordChange(ticket, "status", TicketStatus.OPEN, TicketStatus.IN_PROGRESS, AGENT);
+		verify(historyService).recordChange(ticket, "status", TicketStatus.OPEN, TicketStatus.IN_PROGRESS, AGENT_EMAIL);
 	}
 
 	@Test
 	void blockedStatusMoveChangesNothing() {
 		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
 
-		assertThatThrownBy(() -> ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.RESOLVED, AGENT)))
+		assertThatThrownBy(() -> ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.RESOLVED), agent))
 				.isInstanceOf(InvalidStatusTransitionException.class)
 				.hasMessage("Cannot move ticket from OPEN to RESOLVED");
 
@@ -133,27 +146,27 @@ class TicketServiceTest {
 
 	@Test
 	void overrideChangesFinalValuesAndKeepsTheSuggestion() {
-		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
-		when(ticketRepository.saveAndFlush(ticket)).thenReturn(ticket);
+		givenTicketCanBeSaved();
 
 		TicketResponse response = ticketService.override(ID,
-				new OverrideRequest(TicketCategory.HARDWARE, TicketPriority.CRITICAL, AGENT));
+				new OverrideRequest(TicketCategory.HARDWARE, TicketPriority.CRITICAL), agent);
 
 		assertThat(response.overridden()).isTrue();
 		assertThat(response.category()).isEqualTo(TicketCategory.HARDWARE);
 		assertThat(response.priority()).isEqualTo(TicketPriority.CRITICAL);
 		assertThat(response.aiCategory()).isEqualTo(TicketCategory.NETWORK);
 		assertThat(response.aiPriority()).isEqualTo(TicketPriority.HIGH);
-		verify(historyService).recordChange(ticket, "category", TicketCategory.NETWORK, TicketCategory.HARDWARE, AGENT);
-		verify(historyService).recordChange(ticket, "priority", TicketPriority.HIGH, TicketPriority.CRITICAL, AGENT);
+		verify(historyService).recordChange(ticket, "category", TicketCategory.NETWORK, TicketCategory.HARDWARE,
+				AGENT_EMAIL);
+		verify(historyService).recordChange(ticket, "priority", TicketPriority.HIGH, TicketPriority.CRITICAL,
+				AGENT_EMAIL);
 	}
 
 	@Test
 	void overrideWithOneFieldLeavesTheOtherAlone() {
-		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
-		when(ticketRepository.saveAndFlush(ticket)).thenReturn(ticket);
+		givenTicketCanBeSaved();
 
-		TicketResponse response = ticketService.override(ID, new OverrideRequest(null, TicketPriority.LOW, AGENT));
+		TicketResponse response = ticketService.override(ID, new OverrideRequest(null, TicketPriority.LOW), agent);
 
 		assertThat(response.overridden()).isTrue();
 		assertThat(response.category()).isEqualTo(TicketCategory.NETWORK);
@@ -162,11 +175,10 @@ class TicketServiceTest {
 
 	@Test
 	void overrideWithTheSameValuesIsNotAnOverride() {
-		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
-		when(ticketRepository.saveAndFlush(ticket)).thenReturn(ticket);
+		givenTicketCanBeSaved();
 
 		TicketResponse response = ticketService.override(ID,
-				new OverrideRequest(TicketCategory.NETWORK, TicketPriority.HIGH, AGENT));
+				new OverrideRequest(TicketCategory.NETWORK, TicketPriority.HIGH), agent);
 
 		assertThat(response.overridden()).isFalse();
 	}
@@ -175,13 +187,14 @@ class TicketServiceTest {
 	void reclassifyUpdatesFinalValuesWhenNotOverridden() {
 		givenReclassifyReturns(EMAIL_LOW);
 
-		TicketResponse response = ticketService.reclassify(ID, new ReclassifyRequest(AGENT));
+		TicketResponse response = ticketService.reclassify(ID, agent);
 
 		assertThat(response.category()).isEqualTo(TicketCategory.EMAIL);
 		assertThat(response.priority()).isEqualTo(TicketPriority.LOW);
 		assertThat(response.classifiedBy()).isEqualTo(ClassifierSource.RULES);
-		verify(historyService).recordChange(ticket, "category", TicketCategory.NETWORK, TicketCategory.EMAIL, AGENT);
-		verify(historyService).recordChange(ticket, "priority", TicketPriority.HIGH, TicketPriority.LOW, AGENT);
+		verify(historyService).recordChange(ticket, "category", TicketCategory.NETWORK, TicketCategory.EMAIL,
+				AGENT_EMAIL);
+		verify(historyService).recordChange(ticket, "priority", TicketPriority.HIGH, TicketPriority.LOW, AGENT_EMAIL);
 	}
 
 	@Test
@@ -189,7 +202,7 @@ class TicketServiceTest {
 		ticket.override(TicketCategory.HARDWARE, TicketPriority.CRITICAL);
 		givenReclassifyReturns(EMAIL_LOW);
 
-		TicketResponse response = ticketService.reclassify(ID, new ReclassifyRequest(AGENT));
+		TicketResponse response = ticketService.reclassify(ID, agent);
 
 		assertThat(response.category()).isEqualTo(TicketCategory.HARDWARE);
 		assertThat(response.priority()).isEqualTo(TicketPriority.CRITICAL);
@@ -203,11 +216,46 @@ class TicketServiceTest {
 	void reclassifyCallsTheClassifierBeforeOpeningTheTransaction() {
 		givenReclassifyReturns(EMAIL_LOW);
 
-		ticketService.reclassify(ID, new ReclassifyRequest(AGENT));
+		ticketService.reclassify(ID, agent);
 
 		InOrder order = inOrder(classifier, transactionTemplate);
 		order.verify(classifier).classify(TITLE, DESCRIPTION);
 		order.verify(transactionTemplate).execute(any());
+	}
+
+	@Test
+	void assignSetsTheAssigneeAndWritesHistory() {
+		givenTicketCanBeSaved();
+		when(userRepository.getOrThrow(2L)).thenReturn(agent);
+
+		TicketResponse response = ticketService.assign(ID, new AssignRequest(2L), agent);
+
+		assertThat(response.assigneeId()).isEqualTo(2L);
+		assertThat(response.assigneeEmail()).isEqualTo(AGENT_EMAIL);
+		verify(historyService).recordChange(ticket, "assignee", null, AGENT_EMAIL, AGENT_EMAIL);
+	}
+
+	@Test
+	void assignWithNoIdRemovesTheAssignee() {
+		ticket.assignTo(agent);
+		givenTicketCanBeSaved();
+
+		TicketResponse response = ticketService.assign(ID, new AssignRequest(null), agent);
+
+		assertThat(response.assigneeId()).isNull();
+		verify(historyService).recordChange(ticket, "assignee", AGENT_EMAIL, null, AGENT_EMAIL);
+	}
+
+	@Test
+	void assignRejectsAnEmployee() {
+		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
+		when(userRepository.getOrThrow(1L)).thenReturn(employee);
+
+		assertThatThrownBy(() -> ticketService.assign(ID, new AssignRequest(1L), agent))
+				.isInstanceOf(BadRequestException.class);
+
+		assertThat(ticket.getAssignee()).isNull();
+		verify(historyService, never()).recordChange(any(), any(), isNull(), any(), any());
 	}
 
 	@Test
@@ -223,12 +271,22 @@ class TicketServiceTest {
 		assertThat(stats.byPriority()).containsAllEntriesOf(Map.of(TicketPriority.HIGH, 1L, TicketPriority.LOW, 0L));
 	}
 
-	private void givenReclassifyReturns(ClassificationResult classification) {
+	private void givenTicketCanBeSaved() {
 		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
 		when(ticketRepository.saveAndFlush(ticket)).thenReturn(ticket);
+	}
+
+	private void givenReclassifyReturns(ClassificationResult classification) {
+		givenTicketCanBeSaved();
 		when(classifier.classify(TITLE, DESCRIPTION)).thenReturn(classification);
 		when(transactionTemplate.execute(any()))
 				.then(call -> call.<TransactionCallback<TicketResponse>>getArgument(0).doInTransaction(null));
+	}
+
+	private static User user(long id, String email, UserRole role) {
+		User user = new User(email, "hash", role);
+		ReflectionTestUtils.setField(user, "id", id);
+		return user;
 	}
 
 	private static List<Object[]> rows(Object value, long count) {

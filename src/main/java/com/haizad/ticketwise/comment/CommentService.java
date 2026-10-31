@@ -6,6 +6,7 @@ import com.haizad.ticketwise.comment.dto.CommentResponse;
 import com.haizad.ticketwise.comment.dto.CreateCommentRequest;
 import com.haizad.ticketwise.ticket.Ticket;
 import com.haizad.ticketwise.ticket.TicketRepository;
+import com.haizad.ticketwise.user.User;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,8 +23,8 @@ public class CommentService {
 	}
 
 	@Transactional(readOnly = true)
-	public List<CommentResponse> list(long ticketId) {
-		ticketRepository.getOrThrow(ticketId);
+	public List<CommentResponse> list(long ticketId, User user) {
+		ticketRepository.getVisibleOrThrow(ticketId, user);
 		return commentRepository.findByTicketIdOrderByIdAsc(ticketId)
 				.stream()
 				.map(CommentResponse::from)
@@ -31,9 +32,9 @@ public class CommentService {
 	}
 
 	@Transactional
-	public CommentResponse add(long ticketId, CreateCommentRequest request) {
-		Ticket ticket = ticketRepository.getOrThrow(ticketId);
-		Comment comment = new Comment(ticket, request.authorEmail(), request.body());
+	public CommentResponse add(long ticketId, CreateCommentRequest request, User user) {
+		Ticket ticket = ticketRepository.getVisibleOrThrow(ticketId, user);
+		Comment comment = new Comment(ticket, user.getEmail(), request.body());
 		return CommentResponse.from(commentRepository.save(comment));
 	}
 

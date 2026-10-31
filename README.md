@@ -4,16 +4,17 @@
 
 An IT helpdesk built with Java and Spring Boot. Employees report IT problems in plain words, AI suggests a category and priority for each ticket, and IT agents work through them with a clear status workflow.
 
-**Status: backend, tests, Docker and CI complete (Phase 2).** Login and the React dashboard are not built yet.
+**Status: backend with login and roles, tests, Docker and CI complete (Phase 3).** The React dashboard is not built yet.
 
 ## What it does
 
-- **Tickets:** create, list, view and change status. Invalid status moves are rejected.
+- **Accounts and roles:** log in with a JWT. Employees see only their own tickets, while agents and admins manage all of them.
+- **Tickets:** create, list, view, assign and change status. Invalid status moves are rejected.
 - **AI classification:** Gemini suggests a category, priority and a one-line reason for each new ticket.
 - **Rule-based fallback:** if Gemini is down, returns a bad answer or has no API key, keyword rules take over, so a ticket is never lost.
 - **Agent override:** an agent can change the category or priority. The AI suggestion and the final value are both kept.
-- **Comments and audit history:** every status, category and priority change records who changed what, and when.
-- **Filters and stats:** filter by status, priority and category, with paging, sorting and summary counts.
+- **Comments and audit history:** every status, category, priority and assignee change records who changed what, and when, taken from the login.
+- **Filters and stats:** filter by status, priority, category and assignee, with paging, sorting and summary counts.
 
 ## Run it
 
@@ -45,28 +46,41 @@ The default `dev` profile uses an in-memory H2 database, so nothing else needs t
 
 ## API
 
-All paths start with `/api/v1`.
+All paths start with `/api/v1`. Everything except `/auth` needs an `Authorization: Bearer <token>` header. In Swagger UI, use the **Authorize** button.
 
-| Method | Path | What it does |
-| --- | --- | --- |
-| POST | `/tickets` | Create a ticket and classify it |
-| GET | `/tickets` | List tickets. Filters: `status`, `priority`, `category`. Also `page`, `size`, `sort` |
-| GET | `/tickets/{id}` | Get one ticket |
-| PATCH | `/tickets/{id}/status` | Change status |
-| PATCH | `/tickets/{id}/classification` | Override category and/or priority |
-| POST | `/tickets/{id}/reclassify` | Run the classifier again |
-| GET | `/tickets/{id}/comments` | List comments |
-| POST | `/tickets/{id}/comments` | Add a comment |
-| GET | `/tickets/{id}/history` | Read the audit log |
-| GET | `/stats` | Counts by status, category and priority |
+| Method | Path | What it does | Who |
+| --- | --- | --- | --- |
+| POST | `/auth/register` | Create an account and get a token | Anyone |
+| POST | `/auth/login` | Get a token | Anyone |
+| POST | `/tickets` | Create a ticket and classify it | Everyone |
+| GET | `/tickets` | List tickets. Filters: `status`, `priority`, `category`, `assigneeId`. Also `page`, `size`, `sort` | Employees get their own |
+| GET | `/tickets/{id}` | Get one ticket | Employees get their own |
+| GET | `/tickets/{id}/comments` | List comments | Employees get their own |
+| POST | `/tickets/{id}/comments` | Add a comment | Employees on their own |
+| GET | `/tickets/{id}/history` | Read the audit log | Employees get their own |
+| PATCH | `/tickets/{id}/status` | Change status | Agent, Admin |
+| PATCH | `/tickets/{id}/classification` | Override category and/or priority | Agent, Admin |
+| PATCH | `/tickets/{id}/assignee` | Assign to an agent, or `null` to unassign | Agent, Admin |
+| POST | `/tickets/{id}/reclassify` | Run the classifier again | Agent, Admin |
+| GET | `/users/agents` | List agents and admins | Agent, Admin |
+| GET | `/users` | List users | Admin |
+| PATCH | `/users/{id}/role` | Change a user's role | Admin |
+| GET | `/stats` | Counts by status, category and priority | Admin |
 
-Create a ticket:
+Register, then create a ticket:
 
 ```bash
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{"email":"aina@example.com","password":"choose-a-password"}'
+
 curl -X POST http://localhost:8080/api/v1/tickets \
   -H "Content-Type: application/json" \
-  -d '{"title":"VPN keeps disconnecting","description":"My VPN drops every 10 minutes.","requesterEmail":"aina@example.com"}'
+  -H "Authorization: Bearer <token from the response above>" \
+  -d '{"title":"VPN keeps disconnecting","description":"My VPN drops every 10 minutes."}'
 ```
+
+Everyone who registers is an Employee. To get agents, set `ADMIN_EMAIL` and `ADMIN_PASSWORD` so the app creates the first admin at startup, then log in as that admin and use `PATCH /users/{id}/role`.
 
 ## Status workflow
 
@@ -97,6 +111,12 @@ Settings come from environment variables or a local `.env` file. Copy `.env.exam
 
 To use Gemini, set `GEMINI_API_KEY`. Without it, the app uses the keyword rules only.
 
+Set `JWT_SECRET` to at least 32 random characters. Without it, the app makes a random key at startup, so everyone has to log in again after a restart.
+
 ## Security
 
-The API has no login yet. Until login is added, requests use an email field instead of a logged-in user, and anyone can send any email. Don't expose the app to the internet.
+- Passwords are stored only as BCrypt hashes.
+- The role is read from the database on every request, so a role change takes effect immediately.
+- An employee asking for someone else's ticket gets the same 404 as for a ticket that doesn't exist.
+
+Before any real deployment, these are still missing: a limit on login attempts, logout and refresh tokens, and email verification. Without email verification, anyone can register with any address. A token stays valid until it expires, 60 minutes by default.

@@ -5,17 +5,19 @@ import java.util.List;
 import com.haizad.ticketwise.common.PageResponse;
 import com.haizad.ticketwise.history.HistoryResponse;
 import com.haizad.ticketwise.history.HistoryService;
+import com.haizad.ticketwise.ticket.dto.AssignRequest;
 import com.haizad.ticketwise.ticket.dto.CreateTicketRequest;
 import com.haizad.ticketwise.ticket.dto.OverrideRequest;
-import com.haizad.ticketwise.ticket.dto.ReclassifyRequest;
 import com.haizad.ticketwise.ticket.dto.TicketResponse;
 import com.haizad.ticketwise.ticket.dto.UpdateStatusRequest;
+import com.haizad.ticketwise.user.User;
 import jakarta.validation.Valid;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -41,42 +43,53 @@ public class TicketController {
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	public TicketResponse create(@Valid @RequestBody CreateTicketRequest request) {
-		return ticketService.create(request);
+	public TicketResponse create(@Valid @RequestBody CreateTicketRequest request,
+			@AuthenticationPrincipal User user) {
+		return ticketService.create(request, user);
 	}
 
 	@GetMapping
 	public PageResponse<TicketResponse> list(@RequestParam(required = false) TicketStatus status,
 			@RequestParam(required = false) TicketPriority priority,
 			@RequestParam(required = false) TicketCategory category,
+			@RequestParam(required = false) Long assigneeId,
 			@ParameterObject @PageableDefault(size = 20, sort = "createdAt",
-					direction = Sort.Direction.DESC) Pageable pageable) {
-		return ticketService.list(status, priority, category, pageable);
+					direction = Sort.Direction.DESC) Pageable pageable,
+			@AuthenticationPrincipal User user) {
+		return ticketService.list(status, priority, category, assigneeId, pageable, user);
 	}
 
 	@GetMapping("/{id}")
-	public TicketResponse get(@PathVariable long id) {
-		return ticketService.get(id);
+	public TicketResponse get(@PathVariable long id, @AuthenticationPrincipal User user) {
+		return ticketService.get(id, user);
 	}
 
 	@PatchMapping("/{id}/status")
-	public TicketResponse changeStatus(@PathVariable long id, @Valid @RequestBody UpdateStatusRequest request) {
-		return ticketService.changeStatus(id, request);
+	public TicketResponse changeStatus(@PathVariable long id, @Valid @RequestBody UpdateStatusRequest request,
+			@AuthenticationPrincipal User user) {
+		return ticketService.changeStatus(id, request, user);
 	}
 
 	@PatchMapping("/{id}/classification")
-	public TicketResponse override(@PathVariable long id, @Valid @RequestBody OverrideRequest request) {
-		return ticketService.override(id, request);
+	public TicketResponse override(@PathVariable long id, @Valid @RequestBody OverrideRequest request,
+			@AuthenticationPrincipal User user) {
+		return ticketService.override(id, request, user);
 	}
 
 	@PostMapping("/{id}/reclassify")
-	public TicketResponse reclassify(@PathVariable long id, @Valid @RequestBody ReclassifyRequest request) {
-		return ticketService.reclassify(id, request);
+	public TicketResponse reclassify(@PathVariable long id, @AuthenticationPrincipal User user) {
+		return ticketService.reclassify(id, user);
+	}
+
+	@PatchMapping("/{id}/assignee")
+	public TicketResponse assign(@PathVariable long id, @RequestBody AssignRequest request,
+			@AuthenticationPrincipal User user) {
+		return ticketService.assign(id, request, user);
 	}
 
 	@GetMapping("/{id}/history")
-	public List<HistoryResponse> history(@PathVariable long id) {
-		return historyService.list(id);
+	public List<HistoryResponse> history(@PathVariable long id, @AuthenticationPrincipal User user) {
+		return historyService.list(id, user);
 	}
 
 }

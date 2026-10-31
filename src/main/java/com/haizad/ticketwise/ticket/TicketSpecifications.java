@@ -11,7 +11,8 @@ final class TicketSpecifications {
 	private TicketSpecifications() {
 	}
 
-	static Specification<Ticket> matching(TicketStatus status, TicketPriority priority, TicketCategory category) {
+	static Specification<Ticket> matching(TicketStatus status, TicketPriority priority, TicketCategory category,
+			Long assigneeId, Long requesterId) {
 		return (root, query, builder) -> {
 			List<Predicate> filters = new ArrayList<>();
 			if (status != null) {
@@ -22,6 +23,12 @@ final class TicketSpecifications {
 			}
 			if (category != null) {
 				filters.add(builder.equal(root.get("category"), category));
+			}
+			if (assigneeId != null) {
+				filters.add(builder.equal(root.get("assignee").get("id"), assigneeId));
+			}
+			if (requesterId != null) {
+				filters.add(builder.equal(root.get("requester").get("id"), requesterId));
 			}
 			return builder.and(filters.toArray(Predicate[]::new));
 		};
