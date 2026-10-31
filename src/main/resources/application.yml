@@ -10,6 +10,12 @@ spring:
       ddl-auto: validate
     open-in-view: false
 
+gemini:
+  api-key: ${GEMINI_API_KEY:}
+  model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+  timeout-ms: ${GEMINI_TIMEOUT_MS:5000}
+  base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+
 management:
   endpoints:
     web:
