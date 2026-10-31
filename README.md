@@ -1,8 +1,10 @@
 # TicketWise
 
+[![CI](https://github.com/HAIZ4D/ticketwise/actions/workflows/ci.yml/badge.svg)](https://github.com/HAIZ4D/ticketwise/actions/workflows/ci.yml)
+
 An IT helpdesk built with Java and Spring Boot. Employees report IT problems in plain words, AI suggests a category and priority for each ticket, and IT agents work through them with a clear status workflow.
 
-**Status: core backend complete (Phase 1).** Automated tests, Docker, login and the React dashboard are not built yet.
+**Status: backend, tests, Docker and CI complete (Phase 2).** Login and the React dashboard are not built yet.
 
 ## What it does
 
@@ -15,6 +17,20 @@ An IT helpdesk built with Java and Spring Boot. Employees report IT problems in 
 
 ## Run it
 
+### With Docker
+
+This starts the app and PostgreSQL with one command. You only need Docker.
+
+```bash
+docker compose up --build
+```
+
+Then open Swagger UI to try the API: http://localhost:8080/swagger-ui.html
+
+Data is kept in a Docker volume, so it survives restarts. `docker compose down -v` deletes it. Settings in a `.env` file are optional here.
+
+### Without Docker
+
 You need JDK 25. You don't need to install Maven, because the project includes Maven Wrapper.
 
 ```bash
@@ -24,8 +40,6 @@ You need JDK 25. You don't need to install Maven, because the project includes M
 # macOS or Linux
 ./mvnw spring-boot:run
 ```
-
-Then open Swagger UI to try the API: http://localhost:8080/swagger-ui.html
 
 The default `dev` profile uses an in-memory H2 database, so nothing else needs to be installed. Data is lost when the app stops.
 
@@ -66,12 +80,16 @@ curl -X POST http://localhost:8080/api/v1/tickets \
 ## Run the tests
 
 ```bash
-# Windows
-.\mvnw.cmd test
-
-# macOS or Linux
+# Fast tests, no Docker needed
 ./mvnw test
+
+# All tests, including one on real PostgreSQL. Docker must be running.
+./mvnw verify
 ```
+
+On Windows, use `.\mvnw.cmd` instead of `./mvnw`. Tests never call the real Gemini API.
+
+Every push to `main` runs all the tests and builds the Docker image with GitHub Actions.
 
 ## Configuration
 
