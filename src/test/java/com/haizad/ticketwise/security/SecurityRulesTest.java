@@ -103,7 +103,7 @@ class SecurityRulesTest {
 			"PATCH, /api/v1/tickets/1/status", "PATCH, /api/v1/tickets/1/classification",
 			"PATCH, /api/v1/tickets/1/assignee", "POST, /api/v1/tickets/1/reclassify",
 			"GET, /api/v1/tickets/1/comments", "POST, /api/v1/tickets/1/comments", "GET, /api/v1/tickets/1/history",
-			"GET, /api/v1/stats", "GET, /api/v1/users", "GET, /api/v1/users/agents",
+			"GET, /api/v1/stats", "GET, /api/v1/users", "GET, /api/v1/users/me", "GET, /api/v1/users/agents",
 			"PATCH, /api/v1/users/1/role" })
 	void everyProtectedPathNeedsAToken(String method, String path) throws Exception {
 		perform(method, path, null, "{}").andExpect(status().isUnauthorized())
@@ -307,6 +307,16 @@ class SecurityRulesTest {
 		perform("GET", TICKETS + "?assigneeId=" + agent.getId(), token, null)
 			.andExpect(jsonPath("$.totalElements").value(1))
 			.andExpect(jsonPath("$.content[0].title").value("Bob's ticket"));
+	}
+
+	@Test
+	void everyoneCanReadTheirOwnAccount() throws Exception {
+		for (User user : List.of(aina, agent, admin)) {
+			perform("GET", "/api/v1/users/me", tokenFor(user), null).andExpect(status().isOk())
+				.andExpect(jsonPath("$.email").value(user.getEmail()))
+				.andExpect(jsonPath("$.role").value(user.getRole().name()))
+				.andExpect(jsonPath("$.passwordHash").doesNotExist());
+		}
 	}
 
 	@Test

@@ -61,10 +61,10 @@ class TicketControllerTest {
 			""";
 
 	private static final TicketResponse TICKET = new TicketResponse(42L, "VPN keeps disconnecting",
-			"My VPN drops every 10 minutes", "aina@example.com", TicketStatus.OPEN, TicketCategory.NETWORK,
-			TicketPriority.HIGH, TicketCategory.NETWORK, TicketPriority.HIGH, "VPN drops block work.",
-			ClassifierSource.GEMINI, false, null, null, Instant.parse("2026-11-01T10:15:00Z"),
-			Instant.parse("2026-11-01T10:15:00Z"), null);
+			"My VPN drops every 10 minutes", "aina@example.com", TicketStatus.OPEN, TicketStatus.OPEN.nextStatuses(),
+			TicketCategory.NETWORK, TicketPriority.HIGH, TicketCategory.NETWORK, TicketPriority.HIGH,
+			"VPN drops block work.", ClassifierSource.GEMINI, false, null, null,
+			Instant.parse("2026-11-01T10:15:00Z"), Instant.parse("2026-11-01T10:15:00Z"), null);
 
 	private final MockMvc mockMvc;
 
@@ -92,6 +92,7 @@ class TicketControllerTest {
 				.andExpect(status().isCreated())
 				.andExpect(jsonPath("$.id").value(42))
 				.andExpect(jsonPath("$.status").value("OPEN"))
+				.andExpect(jsonPath("$.nextStatuses").value(containsInAnyOrder("IN_PROGRESS", "CLOSED")))
 				.andExpect(jsonPath("$.category").value("NETWORK"))
 				.andExpect(jsonPath("$.classifiedBy").value("GEMINI"))
 				.andExpect(jsonPath("$.createdAt").value("2026-11-01T10:15:00Z"));

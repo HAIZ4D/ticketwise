@@ -32,6 +32,11 @@ public class UserController {
 		return userService.list(pageable);
 	}
 
+	@GetMapping("/me")
+	public UserResponse me(@AuthenticationPrincipal User user) {
+		return UserResponse.from(user);
+	}
+
 	@GetMapping("/agents")
 	public List<UserResponse> listAgents() {
 		return userService.listAgents();

@@ -5,6 +5,7 @@
 .env
 .env.*
 target
+frontend
 CLAUDE.md
 README.md
 *Project Spec.md

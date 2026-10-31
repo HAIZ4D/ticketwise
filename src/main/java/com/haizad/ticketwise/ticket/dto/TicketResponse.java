@@ -1,6 +1,7 @@
 package com.haizad.ticketwise.ticket.dto;
 
 import java.time.Instant;
+import java.util.List;
 
 import com.haizad.ticketwise.classification.ClassifierSource;
 import com.haizad.ticketwise.ticket.Ticket;
@@ -15,6 +16,7 @@ public record TicketResponse(
 		String description,
 		String requesterEmail,
 		TicketStatus status,
+		List<TicketStatus> nextStatuses,
 		TicketCategory category,
 		TicketPriority priority,
 		TicketCategory aiCategory,
@@ -31,11 +33,11 @@ public record TicketResponse(
 	public static TicketResponse from(Ticket ticket) {
 		User assignee = ticket.getAssignee();
 		return new TicketResponse(ticket.getId(), ticket.getTitle(), ticket.getDescription(),
-				ticket.getRequester().getEmail(), ticket.getStatus(), ticket.getCategory(), ticket.getPriority(),
-				ticket.getAiCategory(), ticket.getAiPriority(), ticket.getAiReason(), ticket.getClassifiedBy(),
-				ticket.isOverridden(), (assignee != null) ? assignee.getId() : null,
-				(assignee != null) ? assignee.getEmail() : null, ticket.getCreatedAt(), ticket.getUpdatedAt(),
-				ticket.getResolvedAt());
+				ticket.getRequester().getEmail(), ticket.getStatus(), ticket.getStatus().nextStatuses(),
+				ticket.getCategory(), ticket.getPriority(), ticket.getAiCategory(), ticket.getAiPriority(),
+				ticket.getAiReason(), ticket.getClassifiedBy(), ticket.isOverridden(),
+				(assignee != null) ? assignee.getId() : null, (assignee != null) ? assignee.getEmail() : null,
+				ticket.getCreatedAt(), ticket.getUpdatedAt(), ticket.getResolvedAt());
 	}
 
 }

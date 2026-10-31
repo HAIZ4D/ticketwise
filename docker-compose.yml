@@ -39,5 +39,13 @@ services:
       retries: 20
       start_period: 30s
 
+  web:
+    build: ./frontend
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:3000:8080"
+
 volumes:
   postgres-data:

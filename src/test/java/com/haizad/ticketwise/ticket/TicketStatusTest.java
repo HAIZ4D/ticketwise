@@ -29,4 +29,10 @@ class TicketStatusTest {
 		}
 	}
 
+	@ParameterizedTest
+	@EnumSource(TicketStatus.class)
+	void listsExactlyTheAllowedMoves(TicketStatus from) {
+		assertThat(from.nextStatuses()).containsExactlyInAnyOrderElementsOf(ALLOWED_MOVES.get(from));
+	}
+
 }

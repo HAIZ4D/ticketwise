@@ -1,5 +1,8 @@
 package com.haizad.ticketwise.ticket;
 
+import java.util.Arrays;
+import java.util.List;
+
 public enum TicketStatus {
 
 	OPEN,
@@ -14,6 +17,10 @@ public enum TicketStatus {
 			case RESOLVED -> next == CLOSED || next == IN_PROGRESS;
 			case CLOSED -> false;
 		};
+	}
+
+	public List<TicketStatus> nextStatuses() {
+		return Arrays.stream(values()).filter(this::canMoveTo).toList();
 	}
 
 }

@@ -4,10 +4,11 @@
 
 An IT helpdesk built with Java and Spring Boot. Employees report IT problems in plain words, AI suggests a category and priority for each ticket, and IT agents work through them with a clear status workflow.
 
-**Status: backend with login and roles, tests, Docker and CI complete (Phase 3).** The React dashboard is not built yet.
+**Status: backend, React dashboard, tests, Docker and CI complete (Phase 4).**
 
 ## What it does
 
+- **React dashboard:** a ticket list with filters, ticket pages with comments and history, a create form, and stats and user screens for admins.
 - **Accounts and roles:** log in with a JWT. Employees see only their own tickets, while agents and admins manage all of them.
 - **Tickets:** create, list, view, assign and change status. Invalid status moves are rejected.
 - **AI classification:** Gemini suggests a category, priority and a one-line reason for each new ticket.
@@ -20,19 +21,22 @@ An IT helpdesk built with Java and Spring Boot. Employees report IT problems in 
 
 ### With Docker
 
-This starts the app and PostgreSQL with one command. You only need Docker.
+This starts the dashboard, the API and PostgreSQL with one command. You only need Docker.
 
 ```bash
 docker compose up --build
 ```
 
-Then open Swagger UI to try the API: http://localhost:8080/swagger-ui.html
+| What | Where |
+| --- | --- |
+| Dashboard | http://localhost:3000 |
+| Swagger UI for the API | http://localhost:8080/swagger-ui.html |
 
-Data is kept in a Docker volume, so it survives restarts. `docker compose down -v` deletes it. Settings in a `.env` file are optional here.
+Data is kept in a Docker volume, so it survives restarts. `docker compose down -v` deletes it. Settings in a `.env` file are optional, but you need `ADMIN_EMAIL` and `ADMIN_PASSWORD` to get an admin account.
 
 ### Without Docker
 
-You need JDK 25. You don't need to install Maven, because the project includes Maven Wrapper.
+**Backend:** you need JDK 25. You don't need to install Maven, because the project includes Maven Wrapper.
 
 ```bash
 # Windows
@@ -43,6 +47,16 @@ You need JDK 25. You don't need to install Maven, because the project includes M
 ```
 
 The default `dev` profile uses an in-memory H2 database, so nothing else needs to be installed. Data is lost when the app stops.
+
+**Frontend:** you need Node 22 or newer. Vite forwards `/api` to the backend on port 8080.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Then open http://localhost:5173.
 
 ## API
 
@@ -94,16 +108,22 @@ Everyone who registers is an Employee. To get agents, set `ADMIN_EMAIL` and `ADM
 ## Run the tests
 
 ```bash
-# Fast tests, no Docker needed
+# Fast backend tests, no Docker needed
 ./mvnw test
 
-# All tests, including one on real PostgreSQL. Docker must be running.
+# All backend tests, including real PostgreSQL. Docker must be running.
 ./mvnw verify
+
+# Frontend tests, lint and type checks
+cd frontend
+npm test
+npm run lint
+npm run typecheck
 ```
 
 On Windows, use `.\mvnw.cmd` instead of `./mvnw`. Tests never call the real Gemini API.
 
-Every push to `main` runs all the tests and builds the Docker image with GitHub Actions.
+Every push to `main` runs all of this and builds both Docker images with GitHub Actions.
 
 ## Configuration
 
@@ -118,5 +138,9 @@ Set `JWT_SECRET` to at least 32 random characters. Without it, the app makes a r
 - Passwords are stored only as BCrypt hashes.
 - The role is read from the database on every request, so a role change takes effect immediately.
 - An employee asking for someone else's ticket gets the same 404 as for a ticket that doesn't exist.
+- The dashboard hides staff controls from employees, but the rules are enforced by the API, not the screen.
+- The dashboard is served with a Content Security Policy, and ticket text is always shown as plain text.
+
+The dashboard keeps its token in `localStorage`, so it survives a refresh. An `httpOnly` cookie would be safer against script attacks, but would need CSRF protection.
 
 Before any real deployment, these are still missing: a limit on login attempts, logout and refresh tokens, and email verification. Without email verification, anyone can register with any address. A token stays valid until it expires, 60 minutes by default.
