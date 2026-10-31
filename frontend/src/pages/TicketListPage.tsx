@@ -4,7 +4,7 @@ import { api } from '../api/endpoints.ts'
 import type { TicketFilters } from '../api/endpoints.ts'
 import { CATEGORIES, PRIORITIES, STATUSES } from '../api/types.ts'
 import { isStaff, useCurrentUser } from '../auth/useAuth.ts'
-import { ClassifierBadge, PriorityBadge, StatusBadge } from '../components/Badges.tsx'
+import { ClassifierBadge, PriorityBadge, SlaBadge, StatusBadge } from '../components/Badges.tsx'
 import { ErrorMessage } from '../components/ErrorMessage.tsx'
 import { count, formatDate, label } from '../format.ts'
 
@@ -20,12 +20,14 @@ export function TicketListPage() {
   const [params, setParams] = useSearchParams()
   const page = Number.parseInt(params.get('page') ?? '', 10) || 1
   const mine = staff && params.get('mine') === '1'
+  const overdue = staff && params.get('overdue') === '1'
 
   const filters: TicketFilters = {
     status: params.get('status') ?? undefined,
     priority: params.get('priority') ?? undefined,
     category: params.get('category') ?? undefined,
     assigneeId: mine ? user.id : undefined,
+    overdue: overdue || undefined,
     sort: params.get('sort') ?? SORTS[0].value,
     page: page - 1,
   }
@@ -98,6 +100,16 @@ export function TicketListPage() {
             My queue
           </label>
         )}
+        {staff && (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={overdue}
+              onChange={(e) => setFilter('overdue', e.target.checked ? '1' : '')}
+            />
+            Overdue only
+          </label>
+        )}
       </section>
 
       <ErrorMessage error={tickets.error} />
@@ -117,6 +129,9 @@ export function TicketListPage() {
                   <th scope="col">Title</th>
                   <th scope="col">Status</th>
                   <th scope="col">Priority</th>
+                  <th scope="col" className="wide-only">
+                    SLA
+                  </th>
                   <th scope="col" className="wide-only">
                     Category
                   </th>
@@ -147,6 +162,9 @@ export function TicketListPage() {
                     </td>
                     <td>
                       <PriorityBadge priority={ticket.priority} />
+                    </td>
+                    <td className="wide-only">
+                      <SlaBadge state={ticket.slaState} />
                     </td>
                     <td className="wide-only">
                       {label(ticket.category)} <ClassifierBadge source={ticket.classifiedBy} />

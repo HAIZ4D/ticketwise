@@ -4,7 +4,7 @@
 
 An IT helpdesk built with Java and Spring Boot. Employees report IT problems in plain words, AI suggests a category and priority for each ticket, and IT agents work through them with a clear status workflow.
 
-**Status: backend, React dashboard, tests, Docker and CI complete (Phase 4).**
+**Status: backend, React dashboard, SLA tracking, AI assistance, tests, Docker and CI complete (Phase 5).**
 
 ## What it does
 
@@ -15,7 +15,10 @@ An IT helpdesk built with Java and Spring Boot. Employees report IT problems in 
 - **Rule-based fallback:** if Gemini is down, returns a bad answer or has no API key, keyword rules take over, so a ticket is never lost.
 - **Agent override:** an agent can change the category or priority. The AI suggestion and the final value are both kept.
 - **Comments and audit history:** every status, category, priority and assignee change records who changed what, and when, taken from the login.
-- **Filters and stats:** filter by status, priority, category and assignee, with paging, sorting and summary counts.
+- **Filters and stats:** filter by status, priority, category, assignee and overdue tickets, with paging, sorting and summary counts.
+- **SLA timer:** each priority has a target time, and tickets show whether they're on track, due soon or overdue.
+- **Duplicate detection:** staff see open tickets that look like the one they're reading, using Gemini embeddings.
+- **AI suggested fixes:** staff can ask for a suggestion based on how similar tickets were solved, with links to those tickets. If nothing similar has been solved, Gemini isn't called.
 
 ## Run it
 
@@ -67,15 +70,17 @@ All paths start with `/api/v1`. Everything except `/auth` needs an `Authorizatio
 | POST | `/auth/register` | Create an account and get a token | Anyone |
 | POST | `/auth/login` | Get a token | Anyone |
 | POST | `/tickets` | Create a ticket and classify it | Everyone |
-| GET | `/tickets` | List tickets. Filters: `status`, `priority`, `category`, `assigneeId`. Also `page`, `size`, `sort` | Employees get their own |
+| GET | `/tickets` | List tickets. Filters: `status`, `priority`, `category`, `assigneeId`, `overdue`. Also `page`, `size`, `sort` | Employees get their own |
 | GET | `/tickets/{id}` | Get one ticket | Employees get their own |
 | GET | `/tickets/{id}/comments` | List comments | Employees get their own |
 | POST | `/tickets/{id}/comments` | Add a comment | Employees on their own |
 | GET | `/tickets/{id}/history` | Read the audit log | Employees get their own |
-| PATCH | `/tickets/{id}/status` | Change status | Agent, Admin |
+| PATCH | `/tickets/{id}/status` | Change status. Resolving needs a `resolution` note | Agent, Admin |
 | PATCH | `/tickets/{id}/classification` | Override category and/or priority | Agent, Admin |
 | PATCH | `/tickets/{id}/assignee` | Assign to an agent, or `null` to unassign | Agent, Admin |
 | POST | `/tickets/{id}/reclassify` | Run the classifier again | Agent, Admin |
+| GET | `/tickets/{id}/duplicates` | Open tickets that look similar | Agent, Admin |
+| POST | `/tickets/{id}/suggestion` | Suggest a fix from similar solved tickets | Agent, Admin |
 | GET | `/users/agents` | List agents and admins | Agent, Admin |
 | GET | `/users` | List users | Admin |
 | PATCH | `/users/{id}/role` | Change a user's role | Admin |
@@ -129,7 +134,9 @@ Every push to `main` runs all of this and builds both Docker images with GitHub 
 
 Settings come from environment variables or a local `.env` file. Copy `.env.example` to `.env` and fill in your own values. Never commit `.env`.
 
-To use Gemini, set `GEMINI_API_KEY`. Without it, the app uses the keyword rules only.
+To use Gemini, set `GEMINI_API_KEY`. Without it, the app uses the keyword rules only, and duplicate detection and suggested fixes are unavailable. The key must have no website restriction, because the calls come from a server, not a browser.
+
+SLA targets and similarity thresholds are in `src/main/resources/application.yml`.
 
 Set `JWT_SECRET` to at least 32 random characters. Without it, the app makes a random key at startup, so everyone has to log in again after a restart.
 

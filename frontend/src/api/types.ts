@@ -3,6 +3,7 @@ export type TicketStatus = 'OPEN' | 'IN_PROGRESS' | 'RESOLVED' | 'CLOSED'
 export type TicketPriority = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 export type TicketCategory = 'NETWORK' | 'HARDWARE' | 'SOFTWARE' | 'ACCESS' | 'EMAIL' | 'OTHER'
 export type ClassifierSource = 'GEMINI' | 'RULES'
+export type SlaState = 'ON_TRACK' | 'DUE_SOON' | 'OVERDUE' | 'MET' | 'MISSED' | 'NONE'
 
 export const ROLES: UserRole[] = ['EMPLOYEE', 'AGENT', 'ADMIN']
 export const STATUSES: TicketStatus[] = ['OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED']
@@ -37,9 +38,12 @@ export interface Ticket {
   overridden: boolean
   assigneeId: number | null
   assigneeEmail: string | null
+  slaDueAt: string
+  slaState: SlaState
   createdAt: string
   updatedAt: string
   resolvedAt: string | null
+  resolution: string | null
 }
 
 export interface Comment {
@@ -58,6 +62,18 @@ export interface HistoryEntry {
   changedAt: string
 }
 
+export interface SimilarTicket {
+  id: number
+  title: string
+  status: TicketStatus
+  score: number
+}
+
+export interface Suggestion {
+  suggestion: string | null
+  sources: SimilarTicket[]
+}
+
 export interface Page<T> {
   content: T[]
   page: number
@@ -70,6 +86,7 @@ export interface Stats {
   byStatus: Record<TicketStatus, number>
   byCategory: Record<TicketCategory, number>
   byPriority: Record<TicketPriority, number>
+  overdue: number
 }
 
 export interface FieldError {

@@ -13,8 +13,22 @@ spring:
 gemini:
   api-key: ${GEMINI_API_KEY:}
   model: ${GEMINI_MODEL:gemini-3.5-flash-lite}
+  embedding-model: ${GEMINI_EMBEDDING_MODEL:gemini-embedding-2}
   timeout-ms: ${GEMINI_TIMEOUT_MS:5000}
   base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+
+similarity:
+  duplicate-threshold: 0.85
+  solved-threshold: 0.6
+  max-results: 3
+  job-batch-size: 10
+  job-delay-ms: 60000
+
+sla:
+  critical-hours: 4
+  high-hours: 8
+  medium-hours: 24
+  low-hours: 72
 
 jwt:
   secret: ${JWT_SECRET:}

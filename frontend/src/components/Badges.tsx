@@ -1,4 +1,4 @@
-import type { ClassifierSource, TicketPriority, TicketStatus } from '../api/types.ts'
+import type { ClassifierSource, SlaState, TicketPriority, TicketStatus } from '../api/types.ts'
 import { label } from '../format.ts'
 
 export function StatusBadge({ status }: { status: TicketStatus }) {
@@ -7,6 +7,13 @@ export function StatusBadge({ status }: { status: TicketStatus }) {
 
 export function PriorityBadge({ priority }: { priority: TicketPriority }) {
   return <span className={`badge priority-${priority.toLowerCase()}`}>{label(priority)}</span>
+}
+
+export function SlaBadge({ state }: { state: SlaState }) {
+  if (state === 'NONE') {
+    return null
+  }
+  return <span className={`badge sla-${state.toLowerCase()}`}>{label(state)}</span>
 }
 
 export function ClassifierBadge({ source }: { source: ClassifierSource }) {

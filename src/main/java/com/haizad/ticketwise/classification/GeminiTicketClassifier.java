@@ -1,18 +1,12 @@
 package com.haizad.ticketwise.classification;
 
-import java.net.http.HttpClient;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 import com.haizad.ticketwise.ticket.TicketCategory;
 import com.haizad.ticketwise.ticket.TicketPriority;
-import org.springframework.http.MediaType;
-import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.web.client.RestClient;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 @Component
@@ -41,62 +35,32 @@ public class GeminiTicketClassifier implements TicketClassifier {
 					"reason", Map.of("type", "STRING")),
 			"required", List.of("category", "priority", "reason"));
 
-	private final GeminiProperties properties;
+	private final GeminiApi geminiApi;
 
 	private final JsonMapper jsonMapper;
 
-	private final RestClient restClient;
-
-	public GeminiTicketClassifier(GeminiProperties properties, JsonMapper jsonMapper) {
-		this.properties = properties;
+	public GeminiTicketClassifier(GeminiApi geminiApi, JsonMapper jsonMapper) {
+		this.geminiApi = geminiApi;
 		this.jsonMapper = jsonMapper;
-		Duration timeout = Duration.ofMillis(properties.timeoutMs());
-		HttpClient httpClient = HttpClient.newBuilder().connectTimeout(timeout).build();
-		JdkClientHttpRequestFactory requestFactory = new JdkClientHttpRequestFactory(httpClient);
-		requestFactory.setReadTimeout(timeout);
-		this.restClient = RestClient.builder()
-				.baseUrl(properties.baseUrl())
-				.requestFactory(requestFactory)
-				.build();
 	}
 
 	@Override
 	public ClassificationResult classify(String title, String description) {
-		if (!properties.hasApiKey()) {
-			throw new ClassificationException("No Gemini API key is set");
-		}
+		String ticketText = "Title: " + title + "\nDescription: " + description;
+		String text = geminiApi.generateJson(SYSTEM_PROMPT, ticketText, RESPONSE_SCHEMA);
 		try {
-			String response = restClient.post()
-					.uri("/v1beta/models/{model}:generateContent", properties.model())
-					.header("x-goog-api-key", properties.apiKey())
-					.contentType(MediaType.APPLICATION_JSON)
-					.body(requestBody(title, description))
-					.retrieve()
-					.body(String.class);
-			return parse(response);
+			return parse(text);
 		}
 		catch (RuntimeException ex) {
-			throw new ClassificationException("Gemini call failed: " + ex.getMessage(), ex);
+			throw new GeminiException("Gemini reply was not usable: " + ex.getMessage(), ex);
 		}
 	}
 
-	private static Map<String, Object> requestBody(String title, String description) {
-		String ticketText = "Title: " + title + "\nDescription: " + description;
-		return Map.of(
-				"systemInstruction", Map.of("parts", List.of(Map.of("text", SYSTEM_PROMPT))),
-				"contents", List.of(Map.of("role", "user", "parts", List.of(Map.of("text", ticketText)))),
-				"generationConfig", Map.of(
-						"responseMimeType", "application/json",
-						"responseSchema", RESPONSE_SCHEMA));
-	}
-
-	private ClassificationResult parse(String response) {
-		JsonNode root = jsonMapper.readTree(response);
-		String text = root.path("candidates").path(0).path("content").path("parts").path(0).path("text").asString("");
+	private ClassificationResult parse(String text) {
 		GeminiReply reply = jsonMapper.readValue(text, GeminiReply.class);
 		if (reply.category() == null || reply.priority() == null || reply.reason() == null
 				|| reply.reason().isBlank()) {
-			throw new ClassificationException("Gemini reply is missing a field");
+			throw new GeminiException("Gemini reply is missing a field");
 		}
 		String reason = reply.reason().strip();
 		if (reason.length() > MAX_REASON_LENGTH) {

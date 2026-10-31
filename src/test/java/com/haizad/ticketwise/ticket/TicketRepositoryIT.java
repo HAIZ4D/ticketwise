@@ -1,5 +1,7 @@
 package com.haizad.ticketwise.ticket;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -10,6 +12,8 @@ import com.haizad.ticketwise.comment.Comment;
 import com.haizad.ticketwise.comment.CommentRepository;
 import com.haizad.ticketwise.history.TicketHistory;
 import com.haizad.ticketwise.history.TicketHistoryRepository;
+import com.haizad.ticketwise.similarity.TicketEmbedding;
+import com.haizad.ticketwise.similarity.TicketEmbeddingRepository;
 import com.haizad.ticketwise.user.User;
 import com.haizad.ticketwise.user.UserRepository;
 import com.haizad.ticketwise.user.UserRole;
@@ -59,6 +63,8 @@ class TicketRepositoryIT {
 
 	private final EntityManagerFactory entityManagerFactory;
 
+	private final TicketEmbeddingRepository embeddingRepository;
+
 	private User aina;
 
 	private User bob;
@@ -68,7 +74,8 @@ class TicketRepositoryIT {
 	TicketRepositoryIT(@Autowired TicketRepository ticketRepository, @Autowired UserRepository userRepository,
 			@Autowired CommentRepository commentRepository, @Autowired TicketHistoryRepository historyRepository,
 			@Autowired JdbcTemplate jdbcTemplate, @Autowired TestEntityManager testEntityManager,
-			@Autowired EntityManagerFactory entityManagerFactory) {
+			@Autowired EntityManagerFactory entityManagerFactory,
+			@Autowired TicketEmbeddingRepository embeddingRepository) {
 		this.ticketRepository = ticketRepository;
 		this.userRepository = userRepository;
 		this.commentRepository = commentRepository;
@@ -76,6 +83,7 @@ class TicketRepositoryIT {
 		this.jdbcTemplate = jdbcTemplate;
 		this.testEntityManager = testEntityManager;
 		this.entityManagerFactory = entityManagerFactory;
+		this.embeddingRepository = embeddingRepository;
 	}
 
 	@BeforeEach
@@ -94,7 +102,7 @@ class TicketRepositoryIT {
 		assertThat(jdbcTemplate.queryForObject("select version()", String.class)).startsWith("PostgreSQL 18");
 		assertThat(jdbcTemplate.queryForObject(
 				"select count(*) from flyway_schema_history where success = true", Long.class))
-			.isEqualTo(5);
+			.isEqualTo(7);
 	}
 
 	@Test
@@ -144,6 +152,28 @@ class TicketRepositoryIT {
 	}
 
 	@Test
+	void findsOverdueTicketsForEachPriority() {
+		SlaPolicy policy = new SlaPolicy(4, 8, 24, 72);
+		Instant now = Instant.now().plus(Duration.ofHours(9));
+
+		List<String> overdue = titles(ticketRepository.findAll(TicketSpecifications.overdue(policy, now), FIRST_PAGE));
+
+		assertThat(overdue).containsExactlyInAnyOrder("Alpha VPN issue", "Charlie printer issue");
+	}
+
+	@Test
+	void theOverdueFilterCombinesWithTheOthers() {
+		SlaPolicy policy = new SlaPolicy(4, 8, 24, 72);
+		Instant now = Instant.now().plus(Duration.ofHours(100));
+		Specification<Ticket> ainasOverdue = TicketSpecifications
+			.matching(null, null, null, null, aina.getId())
+			.and(TicketSpecifications.overdue(policy, now));
+
+		assertThat(titles(ticketRepository.findAll(ainasOverdue, FIRST_PAGE)))
+			.containsExactlyInAnyOrder("Alpha VPN issue", "Bravo wifi issue");
+	}
+
+	@Test
 	void pagesAndSortsResults() {
 		Sort byTitle = Sort.by(Sort.Direction.DESC, "title");
 
@@ -173,6 +203,87 @@ class TicketRepositoryIT {
 	}
 
 	@Test
+	void storesEmbeddingsExactlyOnPostgres() {
+		Ticket ticket = ticketWith("Delta login issue");
+		float[] vector = new float[768];
+		vector[0] = 0.25f;
+		vector[767] = -1.5f;
+		embeddingRepository.saveAndFlush(new TicketEmbedding(ticket, "model-a", vector));
+		testEntityManager.clear();
+
+		assertThat(embeddingRepository.findById(ticket.getId()).orElseThrow().getVector()).isEqualTo(vector);
+	}
+
+	@Test
+	void savingANewModelReplacesTheOldEmbedding() {
+		Ticket ticket = ticketWith("Delta login issue");
+		embeddingRepository.saveAndFlush(new TicketEmbedding(ticket, "model-a", new float[] { 1f }));
+		testEntityManager.clear();
+
+		embeddingRepository.saveAndFlush(new TicketEmbedding(ticket, "model-b", new float[] { 2f, 3f }));
+		testEntityManager.clear();
+
+		TicketEmbedding saved = embeddingRepository.findById(ticket.getId()).orElseThrow();
+		assertThat(saved.getModel()).isEqualTo("model-b");
+		assertThat(saved.getVector()).isEqualTo(new float[] { 2f, 3f });
+		assertThat(embeddingRepository.count()).isEqualTo(1);
+	}
+
+	@Test
+	void findsTicketsThatHaveNoEmbeddingForThisModel() {
+		Ticket ticket = ticketWith("Alpha VPN issue");
+		embeddingRepository.saveAndFlush(new TicketEmbedding(ticket, "model-a", new float[] { 1f }));
+
+		List<String> missing = embeddingRepository.findTicketsWithoutEmbedding("model-a", FIRST_PAGE)
+			.stream()
+			.map(Ticket::getTitle)
+			.toList();
+
+		assertThat(missing).hasSize(3).doesNotContain("Alpha VPN issue");
+		assertThat(embeddingRepository.findTicketsWithoutEmbedding("model-b", FIRST_PAGE)).hasSize(4);
+	}
+
+	@Test
+	void findsCandidatesByStatusLeavingOutTheTicketItself() {
+		Ticket open = ticketWith("Alpha VPN issue");
+		Ticket inProgress = ticketWith("Bravo wifi issue");
+		Ticket closed = ticketWith("Delta login issue");
+		for (Ticket ticket : List.of(open, inProgress, closed)) {
+			embeddingRepository.saveAndFlush(new TicketEmbedding(ticket, "model-a", new float[] { 1f }));
+		}
+
+		List<TicketEmbedding> candidates = embeddingRepository.findByTicketStatus("model-a", open.getId(),
+				List.of(TicketStatus.OPEN, TicketStatus.IN_PROGRESS));
+
+		assertThat(candidates).extracting((candidate) -> candidate.getTicket().getTitle())
+			.containsExactly("Bravo wifi issue");
+	}
+
+	@Test
+	void solvedCandidatesAreOnlyTicketsWithAResolution() {
+		Ticket withNote = ticketWith("Bravo wifi issue");
+		withNote.moveTo(TicketStatus.RESOLVED, "Restarted the router");
+		ticketRepository.saveAndFlush(withNote);
+		Ticket closedWithoutNote = ticketWith("Delta login issue");
+		embeddingRepository.saveAndFlush(new TicketEmbedding(withNote, "model-a", new float[] { 1f }));
+		embeddingRepository.saveAndFlush(new TicketEmbedding(closedWithoutNote, "model-a", new float[] { 1f }));
+
+		assertThat(embeddingRepository.findSolved("model-a", 0L))
+			.extracting((candidate) -> candidate.getTicket().getTitle())
+			.containsExactly("Bravo wifi issue");
+	}
+
+	@Test
+	void storesTheLongestResolutionNote() {
+		Ticket ticket = ticketWith("Bravo wifi issue");
+		ticket.moveTo(TicketStatus.RESOLVED, "r".repeat(1000));
+
+		ticketRepository.saveAndFlush(ticket);
+
+		assertThat(ticketRepository.findById(ticket.getId()).orElseThrow().getResolution()).hasSize(1000);
+	}
+
+	@Test
 	void countsTicketsForStats() {
 		assertThat(toMap(ticketRepository.countGroupedByStatus())).containsAllEntriesOf(
 				Map.of(TicketStatus.OPEN, 1L, TicketStatus.IN_PROGRESS, 2L, TicketStatus.CLOSED, 1L));
@@ -196,6 +307,14 @@ class TicketRepositoryIT {
 
 		assertThat(commentRepository.findByTicketIdOrderByIdAsc(ticket.getId())).hasSize(1);
 		assertThat(historyRepository.findByTicketIdOrderByIdAsc(ticket.getId())).hasSize(1);
+	}
+
+	private Ticket ticketWith(String title) {
+		return find(null, null, null, null, null).getContent()
+			.stream()
+			.filter((ticket) -> ticket.getTitle().equals(title))
+			.findFirst()
+			.orElseThrow();
 	}
 
 	private Specification<Ticket> everyTicket() {

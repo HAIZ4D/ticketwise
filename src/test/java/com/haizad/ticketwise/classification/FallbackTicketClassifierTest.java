@@ -51,7 +51,7 @@ class FallbackTicketClassifierTest {
 	@ParameterizedTest
 	@ValueSource(strings = { "No Gemini API key is set", "Request timed out", "Unrecognized token", "500 error" })
 	void fallsBackToRulesWhenGeminiFails(String failure) {
-		when(gemini.classify(TITLE, DESCRIPTION)).thenThrow(new ClassificationException(failure));
+		when(gemini.classify(TITLE, DESCRIPTION)).thenThrow(new GeminiException(failure));
 		when(rules.classify(TITLE, DESCRIPTION)).thenReturn(FROM_RULES);
 
 		assertThat(classifier.classify(TITLE, DESCRIPTION)).isEqualTo(FROM_RULES);

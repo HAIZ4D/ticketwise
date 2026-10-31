@@ -201,6 +201,23 @@ button:disabled {
   color: var(--danger);
 }
 
+.sla-on_track,
+.sla-met {
+  background: #dff3e4;
+  color: #17613a;
+}
+
+.sla-due_soon {
+  background: #fdf1d7;
+  color: #7a4f00;
+}
+
+.sla-overdue,
+.sla-missed {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
 .source-ai {
   background: #ece6fb;
   color: #4d2fa3;
@@ -475,6 +492,21 @@ h3 {
 
 .thread + form {
   margin-top: 1.25rem;
+}
+
+.similar {
+  display: grid;
+  gap: 0.625rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.875rem;
+}
+
+.similar a {
+  display: block;
+  font-weight: 600;
+  overflow-wrap: anywhere;
 }
 
 .meta {

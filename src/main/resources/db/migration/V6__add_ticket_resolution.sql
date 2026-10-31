@@ -1,0 +1,1 @@
+ALTER TABLE tickets ADD COLUMN resolution VARCHAR(1000);

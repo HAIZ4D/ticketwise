@@ -11,12 +11,15 @@ describe('stats page', () => {
         byStatus: { OPEN: 3, IN_PROGRESS: 2, RESOLVED: 1, CLOSED: 0 },
         byPriority: { LOW: 1, MEDIUM: 2, HIGH: 2, CRITICAL: 1 },
         byCategory: { NETWORK: 4, HARDWARE: 1, SOFTWARE: 1, ACCESS: 0, EMAIL: 0, OTHER: 0 },
+        overdue: 9,
       },
     })
 
     renderPage(<App />, '/stats')
 
     expect(await screen.findByText('In progress')).toBeInTheDocument()
+    expect(screen.getByText('Overdue')).toBeInTheDocument()
+    expect(screen.getByText('9')).toBeInTheDocument()
     expect(screen.getByText('Network')).toBeInTheDocument()
     expect(screen.getByText('4')).toBeInTheDocument()
     expect(screen.getByText('Critical')).toBeInTheDocument()

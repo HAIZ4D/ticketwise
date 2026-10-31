@@ -154,19 +154,20 @@ class GeminiTicketClassifierTest {
 	@Test
 	void failsWithoutCallingGeminiWhenThereIsNoKey() {
 		assertThatThrownBy(() -> classifier("").classify("VPN down", "It keeps dropping"))
-				.isInstanceOf(ClassificationException.class)
+				.isInstanceOf(GeminiException.class)
 				.hasMessageContaining("No Gemini API key");
 		assertThat(received).isNull();
 	}
 
 	private GeminiTicketClassifier classifier(String apiKey) {
 		String baseUrl = "http://" + server.getAddress().getHostString() + ":" + server.getAddress().getPort();
-		return new GeminiTicketClassifier(new GeminiProperties(apiKey, MODEL, TIMEOUT_MS, baseUrl), jsonMapper);
+		GeminiProperties properties = new GeminiProperties(apiKey, MODEL, "test-embedding-model", TIMEOUT_MS, baseUrl);
+		return new GeminiTicketClassifier(new GeminiApi(properties, jsonMapper), jsonMapper);
 	}
 
 	private void assertFails(GeminiTicketClassifier classifier) {
 		assertThatThrownBy(() -> classifier.classify("VPN down", "It keeps dropping"))
-				.isInstanceOf(ClassificationException.class);
+				.isInstanceOf(GeminiException.class);
 	}
 
 	private String geminiResponse(String text) {

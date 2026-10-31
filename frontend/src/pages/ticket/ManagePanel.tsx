@@ -4,12 +4,13 @@ import type { FormEvent } from 'react'
 import { api } from '../../api/endpoints.ts'
 import type { Classification } from '../../api/endpoints.ts'
 import { CATEGORIES, PRIORITIES } from '../../api/types.ts'
-import type { Ticket, TicketCategory, TicketPriority } from '../../api/types.ts'
+import type { Ticket, TicketCategory, TicketPriority, TicketStatus } from '../../api/types.ts'
 import { ErrorMessage } from '../../components/ErrorMessage.tsx'
 import { label } from '../../format.ts'
 
 export function ManagePanel({ ticket }: { ticket: Ticket }) {
   const queryClient = useQueryClient()
+  const [resolving, setResolving] = useState(false)
   const agents = useQuery({ queryKey: ['agents'], queryFn: api.listAgents })
   const action = useMutation({
     mutationFn: (run: () => Promise<Ticket>) => run(),
@@ -23,6 +24,18 @@ export function ManagePanel({ ticket }: { ticket: Ticket }) {
 
   function assign(value: string) {
     action.mutate(() => api.assign(ticket.id, value ? Number(value) : null))
+  }
+
+  function moveTo(status: TicketStatus) {
+    if (status === 'RESOLVED') {
+      setResolving(true)
+    } else {
+      action.mutate(() => api.changeStatus(ticket.id, status))
+    }
+  }
+
+  function resolve(note: string) {
+    action.mutate(() => api.changeStatus(ticket.id, 'RESOLVED', note), { onSuccess: () => setResolving(false) })
   }
 
   return (
@@ -40,13 +53,17 @@ export function ManagePanel({ ticket }: { ticket: Ticket }) {
               type="button"
               className="button-quiet"
               disabled={action.isPending}
-              onClick={() => action.mutate(() => api.changeStatus(ticket.id, status))}
+              onClick={() => moveTo(status)}
             >
               {label(status)}
             </button>
           ))}
         </div>
       </div>
+
+      {resolving && (
+        <ResolveForm disabled={action.isPending} onSave={resolve} onCancel={() => setResolving(false)} />
+      )}
 
       <label>
         Assignee
@@ -77,6 +94,38 @@ export function ManagePanel({ ticket }: { ticket: Ticket }) {
         Run classifier again
       </button>
     </section>
+  )
+}
+
+interface ResolveFormProps {
+  disabled: boolean
+  onSave: (note: string) => void
+  onCancel: () => void
+}
+
+function ResolveForm({ disabled, onSave, onCancel }: ResolveFormProps) {
+  const [note, setNote] = useState('')
+
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault()
+    onSave(note)
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <label>
+        How was it fixed?
+        <textarea required maxLength={1000} value={note} onChange={(e) => setNote(e.target.value)} />
+      </label>
+      <div className="button-row">
+        <button type="submit" disabled={disabled}>
+          Save and resolve
+        </button>
+        <button type="button" className="button-quiet" onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
   )
 }
 

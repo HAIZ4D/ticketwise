@@ -28,9 +28,12 @@ export function aTicket(overrides: Partial<Ticket> = {}): Ticket {
     overridden: false,
     assigneeId: null,
     assigneeEmail: null,
+    slaDueAt: '2026-11-01T18:15:00Z',
+    slaState: 'ON_TRACK',
     createdAt: '2026-11-01T10:15:00Z',
     updatedAt: '2026-11-01T10:15:00Z',
     resolvedAt: null,
+    resolution: null,
     ...overrides,
   }
 }

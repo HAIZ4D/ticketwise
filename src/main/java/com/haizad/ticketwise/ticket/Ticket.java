@@ -4,6 +4,7 @@ import java.time.Instant;
 
 import com.haizad.ticketwise.classification.ClassificationResult;
 import com.haizad.ticketwise.classification.ClassifierSource;
+import com.haizad.ticketwise.common.BadRequestException;
 import com.haizad.ticketwise.common.InvalidStatusTransitionException;
 import com.haizad.ticketwise.user.User;
 import jakarta.persistence.Column;
@@ -80,6 +81,9 @@ public class Ticket {
 
 	private Instant resolvedAt;
 
+	@Column(length = 1000)
+	private String resolution;
+
 	protected Ticket() {
 	}
 
@@ -100,15 +104,24 @@ public class Ticket {
 	}
 
 	public void moveTo(TicketStatus next) {
+		moveTo(next, null);
+	}
+
+	public void moveTo(TicketStatus next, String resolutionNote) {
 		if (!status.canMoveTo(next)) {
 			throw new InvalidStatusTransitionException("Cannot move ticket from " + status + " to " + next);
+		}
+		if (next == TicketStatus.RESOLVED && (resolutionNote == null || resolutionNote.isBlank())) {
+			throw new BadRequestException("A resolution note is required to resolve a ticket");
 		}
 		status = next;
 		if (next == TicketStatus.RESOLVED) {
 			resolvedAt = Instant.now();
+			resolution = resolutionNote.strip();
 		}
 		else if (next == TicketStatus.IN_PROGRESS) {
 			resolvedAt = null;
+			resolution = null;
 		}
 	}
 
@@ -210,6 +223,10 @@ public class Ticket {
 
 	public Instant getResolvedAt() {
 		return resolvedAt;
+	}
+
+	public String getResolution() {
+		return resolution;
 	}
 
 }

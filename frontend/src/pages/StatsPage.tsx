@@ -14,6 +14,7 @@ export function StatsPage() {
       {stats.isPending && <p className="status-text">Loading stats…</p>}
       {stats.data && (
         <>
+          <StatGroup title="Service targets" counts={{ OVERDUE: stats.data.overdue }} />
           <StatGroup title="By status" counts={stats.data.byStatus} />
           <StatGroup title="By priority" counts={stats.data.byPriority} />
           <StatGroup title="By category" counts={stats.data.byCategory} />

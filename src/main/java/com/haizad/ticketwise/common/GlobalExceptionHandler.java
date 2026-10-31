@@ -41,6 +41,12 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 		return respond(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
 	}
 
+	@ExceptionHandler(ServiceUnavailableException.class)
+	public ResponseEntity<ApiError> handleServiceUnavailable(ServiceUnavailableException ex,
+			HttpServletRequest request) {
+		return respond(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage(), request);
+	}
+
 	@ExceptionHandler(AuthenticationException.class)
 	public ResponseEntity<ApiError> handleBadLogin(AuthenticationException ex, HttpServletRequest request) {
 		return respond(HttpStatus.UNAUTHORIZED, "Invalid email or password", request);

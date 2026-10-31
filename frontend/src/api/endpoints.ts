@@ -4,7 +4,9 @@ import type {
   Comment,
   HistoryEntry,
   Page,
+  SimilarTicket,
   Stats,
+  Suggestion,
   Ticket,
   TicketCategory,
   TicketPriority,
@@ -18,6 +20,7 @@ export interface TicketFilters {
   priority?: string
   category?: string
   assigneeId?: number
+  overdue?: boolean
   sort?: string
   page?: number
 }
@@ -38,8 +41,8 @@ export const api = {
   getTicket: (id: string) => request<Ticket>(`/tickets/${id}`),
   createTicket: (title: string, description: string) =>
     request<Ticket>('/tickets', 'POST', { title, description }),
-  changeStatus: (id: number, status: TicketStatus) =>
-    request<Ticket>(`/tickets/${id}/status`, 'PATCH', { status }),
+  changeStatus: (id: number, status: TicketStatus, resolution?: string) =>
+    request<Ticket>(`/tickets/${id}/status`, 'PATCH', { status, resolution }),
   overrideClassification: (id: number, classification: Classification) =>
     request<Ticket>(`/tickets/${id}/classification`, 'PATCH', classification),
   assign: (id: number, assigneeId: number | null) =>
@@ -50,6 +53,9 @@ export const api = {
   addComment: (ticketId: string, body: string) =>
     request<Comment>(`/tickets/${ticketId}/comments`, 'POST', { body }),
   listHistory: (ticketId: string) => request<HistoryEntry[]>(`/tickets/${ticketId}/history`),
+
+  listDuplicates: (ticketId: string) => request<SimilarTicket[]>(`/tickets/${ticketId}/duplicates`),
+  suggestFix: (ticketId: string) => request<Suggestion>(`/tickets/${ticketId}/suggestion`, 'POST'),
 
   listAgents: () => request<User[]>('/users/agents'),
   listUsers: (page: number) => request<Page<User>>(`/users?page=${page}`),

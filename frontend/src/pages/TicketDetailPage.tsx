@@ -2,12 +2,14 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useParams } from 'react-router'
 import { api } from '../api/endpoints.ts'
 import { isStaff, useCurrentUser } from '../auth/useAuth.ts'
-import { ClassifierBadge, PriorityBadge, StatusBadge } from '../components/Badges.tsx'
+import { ClassifierBadge, PriorityBadge, SlaBadge, StatusBadge } from '../components/Badges.tsx'
 import { ErrorMessage } from '../components/ErrorMessage.tsx'
 import { formatDate, label } from '../format.ts'
 import { CommentsSection } from './ticket/CommentsSection.tsx'
+import { DuplicatesPanel } from './ticket/DuplicatesPanel.tsx'
 import { HistorySection } from './ticket/HistorySection.tsx'
 import { ManagePanel } from './ticket/ManagePanel.tsx'
+import { SuggestionPanel } from './ticket/SuggestionPanel.tsx'
 
 export function TicketDetailPage() {
   const { id = '' } = useParams()
@@ -31,7 +33,7 @@ export function TicketDetailPage() {
     <>
       <title>{`#${ticket.id} ${ticket.title} · TicketWise`}</title>
       <Link to="/tickets">Back to tickets</Link>
-      <div className="detail">
+      <div className="detail" key={ticket.id}>
         <div className="detail-main">
           <section className="card">
             <p className="muted">Ticket #{ticket.id}</p>
@@ -40,9 +42,16 @@ export function TicketDetailPage() {
               <StatusBadge status={ticket.status} />
               <PriorityBadge priority={ticket.priority} />
               <span className="badge">{label(ticket.category)}</span>
+              <SlaBadge state={ticket.slaState} />
             </p>
             <p className="description">{ticket.description}</p>
           </section>
+          {ticket.resolution && (
+            <section className="card">
+              <h2>Resolution</h2>
+              <p className="description">{ticket.resolution}</p>
+            </section>
+          )}
           <CommentsSection ticketId={id} />
           <HistorySection ticketId={id} />
         </div>
@@ -55,6 +64,8 @@ export function TicketDetailPage() {
               <dd>{ticket.requesterEmail}</dd>
               <dt>Assignee</dt>
               <dd>{ticket.assigneeEmail ?? 'None'}</dd>
+              <dt>Target</dt>
+              <dd>{formatDate(ticket.slaDueAt)}</dd>
               <dt>Created</dt>
               <dd>{formatDate(ticket.createdAt)}</dd>
               <dt>Updated</dt>
@@ -70,7 +81,7 @@ export function TicketDetailPage() {
 
           <section className="card">
             <h2>
-              Suggestion <ClassifierBadge source={ticket.classifiedBy} />
+              Classification <ClassifierBadge source={ticket.classifiedBy} />
             </h2>
             <p>
               {label(ticket.aiCategory)}, {label(ticket.aiPriority)} priority
@@ -79,7 +90,13 @@ export function TicketDetailPage() {
             {ticket.overridden && <p className="note">An agent changed this suggestion.</p>}
           </section>
 
-          {isStaff(user) && <ManagePanel ticket={ticket} />}
+          {isStaff(user) && (
+            <>
+              <DuplicatesPanel ticketId={id} />
+              <SuggestionPanel ticketId={id} />
+              <ManagePanel ticket={ticket} />
+            </>
+          )}
         </aside>
       </div>
     </>

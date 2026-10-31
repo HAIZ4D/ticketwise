@@ -6,6 +6,7 @@ import com.haizad.ticketwise.classification.ClassificationResult;
 import com.haizad.ticketwise.classification.ClassifierSource;
 import com.haizad.ticketwise.comment.CommentRepository;
 import com.haizad.ticketwise.history.TicketHistoryRepository;
+import com.haizad.ticketwise.similarity.TicketEmbeddingRepository;
 import com.haizad.ticketwise.ticket.Ticket;
 import com.haizad.ticketwise.ticket.TicketCategory;
 import com.haizad.ticketwise.ticket.TicketPriority;
@@ -57,6 +58,8 @@ class SecurityRulesTest {
 
 	private final TicketHistoryRepository historyRepository;
 
+	private final TicketEmbeddingRepository embeddingRepository;
+
 	private User aina;
 
 	private User bob;
@@ -71,13 +74,15 @@ class SecurityRulesTest {
 
 	SecurityRulesTest(@Autowired MockMvc mockMvc, @Autowired JwtService jwtService,
 			@Autowired UserRepository userRepository, @Autowired TicketRepository ticketRepository,
-			@Autowired CommentRepository commentRepository, @Autowired TicketHistoryRepository historyRepository) {
+			@Autowired CommentRepository commentRepository, @Autowired TicketHistoryRepository historyRepository,
+			@Autowired TicketEmbeddingRepository embeddingRepository) {
 		this.mockMvc = mockMvc;
 		this.jwtService = jwtService;
 		this.userRepository = userRepository;
 		this.ticketRepository = ticketRepository;
 		this.commentRepository = commentRepository;
 		this.historyRepository = historyRepository;
+		this.embeddingRepository = embeddingRepository;
 	}
 
 	@BeforeEach
@@ -92,6 +97,7 @@ class SecurityRulesTest {
 
 	@AfterEach
 	void deleteEverything() {
+		embeddingRepository.deleteAll();
 		historyRepository.deleteAll();
 		commentRepository.deleteAll();
 		ticketRepository.deleteAll();
@@ -103,7 +109,7 @@ class SecurityRulesTest {
 			"PATCH, /api/v1/tickets/1/status", "PATCH, /api/v1/tickets/1/classification",
 			"PATCH, /api/v1/tickets/1/assignee", "POST, /api/v1/tickets/1/reclassify",
 			"GET, /api/v1/tickets/1/comments", "POST, /api/v1/tickets/1/comments", "GET, /api/v1/tickets/1/history",
-			"GET, /api/v1/stats", "GET, /api/v1/users", "GET, /api/v1/users/me", "GET, /api/v1/users/agents",
+			"GET, /api/v1/tickets/1/duplicates", "POST, /api/v1/tickets/1/suggestion", "GET, /api/v1/stats", "GET, /api/v1/users", "GET, /api/v1/users/me", "GET, /api/v1/users/agents",
 			"PATCH, /api/v1/users/1/role" })
 	void everyProtectedPathNeedsAToken(String method, String path) throws Exception {
 		perform(method, path, null, "{}").andExpect(status().isUnauthorized())
@@ -219,7 +225,8 @@ class SecurityRulesTest {
 	}
 
 	@ParameterizedTest
-	@CsvSource({ "PATCH, /status", "PATCH, /classification", "PATCH, /assignee", "POST, /reclassify" })
+	@CsvSource({ "PATCH, /status", "PATCH, /classification", "PATCH, /assignee", "POST, /reclassify",
+			"GET, /duplicates", "POST, /suggestion" })
 	void employeesCannotManageEvenTheirOwnTicket(String method, String suffix) throws Exception {
 		perform(method, TICKETS + "/" + ainaTicket.getId() + suffix, tokenFor(aina), "{}")
 			.andExpect(status().isForbidden())
@@ -258,6 +265,64 @@ class SecurityRulesTest {
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.assigneeEmail").value("agent@example.com"));
 		}
+	}
+
+	@Test
+	void duplicatesAreEmptyRatherThanAnErrorWithoutAKey() throws Exception {
+		perform("GET", TICKETS + "/" + ainaTicket.getId() + "/duplicates", tokenFor(agent), null)
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$", hasSize(0)));
+	}
+
+	@Test
+	void suggestionsReportThatTheyAreUnavailableWithoutAKey() throws Exception {
+		perform("POST", TICKETS + "/" + ainaTicket.getId() + "/suggestion", tokenFor(agent), null)
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.status").value(503))
+			.andExpect(jsonPath("$.message").value("Suggestions are unavailable right now. Please try again later."));
+	}
+
+	@Test
+	void similarityPathsReturn404ForAMissingTicket() throws Exception {
+		perform("GET", TICKETS + "/999999/duplicates", tokenFor(agent), null).andExpect(status().isNotFound());
+		perform("POST", TICKETS + "/999999/suggestion", tokenFor(agent), null).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void resolvingNeedsANoteAndEveryoneCanReadIt() throws Exception {
+		String path = TICKETS + "/" + ainaTicket.getId();
+		String token = tokenFor(agent);
+		perform("PATCH", path + "/status", token, "{\"status\": \"IN_PROGRESS\"}").andExpect(status().isOk());
+
+		perform("PATCH", path + "/status", token, "{\"status\": \"RESOLVED\"}").andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.message").value("A resolution note is required to resolve a ticket"));
+
+		perform("PATCH", path + "/status", token, "{\"status\": \"RESOLVED\", \"resolution\": \"Restarted the router\"}")
+			.andExpect(status().isOk());
+		perform("GET", path, tokenFor(aina), null).andExpect(jsonPath("$.resolution").value("Restarted the router"));
+	}
+
+	@Test
+	void aResolutionNoteCannotBeTooLong() throws Exception {
+		String path = TICKETS + "/" + ainaTicket.getId() + "/status";
+		String longNote = "x".repeat(1001);
+
+		perform("PATCH", path, tokenFor(agent), "{\"status\": \"IN_PROGRESS\", \"resolution\": \"" + longNote + "\"}")
+			.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void ticketsIncludeTheirSlaState() throws Exception {
+		perform("GET", TICKETS + "/" + ainaTicket.getId(), tokenFor(aina), null)
+			.andExpect(jsonPath("$.slaState").value("ON_TRACK"))
+			.andExpect(jsonPath("$.slaDueAt").exists());
+	}
+
+	@Test
+	void theOverdueFilterFindsNothingForBrandNewTickets() throws Exception {
+		perform("GET", TICKETS + "?overdue=true", tokenFor(agent), null).andExpect(status().isOk())
+			.andExpect(jsonPath("$.totalElements").value(0));
+		perform("GET", "/api/v1/stats", tokenFor(admin), null).andExpect(jsonPath("$.overdue").value(0));
 	}
 
 	@Test

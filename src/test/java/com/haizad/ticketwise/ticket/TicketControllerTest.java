@@ -64,7 +64,8 @@ class TicketControllerTest {
 			"My VPN drops every 10 minutes", "aina@example.com", TicketStatus.OPEN, TicketStatus.OPEN.nextStatuses(),
 			TicketCategory.NETWORK, TicketPriority.HIGH, TicketCategory.NETWORK, TicketPriority.HIGH,
 			"VPN drops block work.", ClassifierSource.GEMINI, false, null, null,
-			Instant.parse("2026-11-01T10:15:00Z"), Instant.parse("2026-11-01T10:15:00Z"), null);
+			Instant.parse("2026-11-01T18:15:00Z"), SlaState.ON_TRACK, Instant.parse("2026-11-01T10:15:00Z"),
+			Instant.parse("2026-11-01T10:15:00Z"), null, null);
 
 	private final MockMvc mockMvc;
 
@@ -95,6 +96,8 @@ class TicketControllerTest {
 				.andExpect(jsonPath("$.nextStatuses").value(containsInAnyOrder("IN_PROGRESS", "CLOSED")))
 				.andExpect(jsonPath("$.category").value("NETWORK"))
 				.andExpect(jsonPath("$.classifiedBy").value("GEMINI"))
+				.andExpect(jsonPath("$.slaState").value("ON_TRACK"))
+				.andExpect(jsonPath("$.slaDueAt").value("2026-11-01T18:15:00Z"))
 				.andExpect(jsonPath("$.createdAt").value("2026-11-01T10:15:00Z"));
 	}
 
@@ -203,19 +206,21 @@ class TicketControllerTest {
 
 	@Test
 	void listPassesFiltersAndDefaultPaging() throws Exception {
-		when(ticketService.list(eq(TicketStatus.OPEN), isNull(), eq(TicketCategory.NETWORK), eq(7L), any(), eq(AGENT)))
+		when(ticketService.list(eq(TicketStatus.OPEN), isNull(), eq(TicketCategory.NETWORK), eq(7L), eq(true), any(),
+				eq(AGENT)))
 				.thenReturn(new PageResponse<>(List.of(TICKET), 0, 20, 1, 1));
 
 		mockMvc.perform(get(TICKETS).with(user(AGENT))
 				.param("status", "OPEN")
 				.param("category", "NETWORK")
-				.param("assigneeId", "7"))
+				.param("assigneeId", "7")
+				.param("overdue", "true"))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.content[0].id").value(42))
 				.andExpect(jsonPath("$.totalElements").value(1));
 
 		ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-		verify(ticketService).list(eq(TicketStatus.OPEN), isNull(), eq(TicketCategory.NETWORK), eq(7L),
+		verify(ticketService).list(eq(TicketStatus.OPEN), isNull(), eq(TicketCategory.NETWORK), eq(7L), eq(true),
 				pageable.capture(), eq(AGENT));
 		assertThat(pageable.getValue().getPageSize()).isEqualTo(20);
 		assertThat(pageable.getValue().getSort()).isEqualTo(Sort.by(Sort.Direction.DESC, "createdAt"));

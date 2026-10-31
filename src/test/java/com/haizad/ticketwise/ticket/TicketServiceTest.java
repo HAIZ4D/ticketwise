@@ -1,5 +1,8 @@
 package com.haizad.ticketwise.ticket;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -21,16 +24,20 @@ import com.haizad.ticketwise.user.UserRole;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentMatchers;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.transaction.support.TransactionCallback;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
@@ -55,6 +62,8 @@ class TicketServiceTest {
 
 	private static final ClassificationResult EMAIL_LOW = new ClassificationResult(TicketCategory.EMAIL,
 			TicketPriority.LOW, "A second opinion.", ClassifierSource.RULES);
+
+	private static final Clock CLOCK = Clock.fixed(Instant.parse("2099-01-01T00:00:00Z"), ZoneOffset.UTC);
 
 	private final User employee = user(1L, "aina@example.com", UserRole.EMPLOYEE);
 
@@ -82,14 +91,18 @@ class TicketServiceTest {
 	@BeforeEach
 	void setUp() {
 		ticketService = new TicketService(ticketRepository, userRepository, classifier, historyService,
-				transactionTemplate);
+				transactionTemplate, new SlaPolicy(4, 8, 24, 72), CLOCK);
 		ticket = new Ticket(TITLE, DESCRIPTION, employee, NETWORK_HIGH);
+		ticket.onCreate();
 	}
 
 	@Test
 	void createSavesTheClassifierResultForTheLoggedInUser() {
 		when(classifier.classify(TITLE, DESCRIPTION)).thenReturn(NETWORK_HIGH);
-		when(ticketRepository.save(any())).then(returnsFirstArg());
+		when(ticketRepository.save(any())).then((call) -> {
+			call.<Ticket>getArgument(0).onCreate();
+			return call.getArgument(0);
+		});
 
 		TicketResponse response = ticketService.create(new CreateTicketRequest(TITLE, DESCRIPTION), employee);
 
@@ -108,7 +121,7 @@ class TicketServiceTest {
 	void changeStatusWritesHistoryUnderTheLoggedInUser() {
 		givenTicketCanBeSaved();
 
-		TicketResponse response = ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.IN_PROGRESS),
+		TicketResponse response = ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.IN_PROGRESS, null),
 				agent);
 
 		assertThat(response.status()).isEqualTo(TicketStatus.IN_PROGRESS);
@@ -119,7 +132,7 @@ class TicketServiceTest {
 	void blockedStatusMoveChangesNothing() {
 		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
 
-		assertThatThrownBy(() -> ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.RESOLVED), agent))
+		assertThatThrownBy(() -> ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.RESOLVED, "Fixed"), agent))
 				.isInstanceOf(InvalidStatusTransitionException.class)
 				.hasMessage("Cannot move ticket from OPEN to RESOLVED");
 
@@ -133,15 +146,65 @@ class TicketServiceTest {
 		ticket.moveTo(TicketStatus.IN_PROGRESS);
 		assertThat(ticket.getResolvedAt()).isNull();
 
-		ticket.moveTo(TicketStatus.RESOLVED);
+		ticket.moveTo(TicketStatus.RESOLVED, "Restarted the router");
 		assertThat(ticket.getResolvedAt()).isNotNull();
 
 		ticket.moveTo(TicketStatus.IN_PROGRESS);
 		assertThat(ticket.getResolvedAt()).isNull();
 
-		ticket.moveTo(TicketStatus.RESOLVED);
+		ticket.moveTo(TicketStatus.RESOLVED, "Replaced the router");
 		ticket.moveTo(TicketStatus.CLOSED);
 		assertThat(ticket.getResolvedAt()).isNotNull();
+	}
+
+	@Test
+	void resolvingSavesTheNoteAndReopeningClearsIt() {
+		ticket.moveTo(TicketStatus.IN_PROGRESS);
+		givenTicketCanBeSaved();
+
+		TicketResponse response = ticketService.changeStatus(ID,
+				new UpdateStatusRequest(TicketStatus.RESOLVED, "  Restarted the router  "), agent);
+
+		assertThat(response.resolution()).isEqualTo("Restarted the router");
+
+		TicketResponse reopened = ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.IN_PROGRESS, null),
+				agent);
+
+		assertThat(reopened.resolution()).isNull();
+	}
+
+	@Test
+	void closingAResolvedTicketKeepsTheNote() {
+		ticket.moveTo(TicketStatus.IN_PROGRESS);
+		ticket.moveTo(TicketStatus.RESOLVED, "Restarted the router");
+		ticket.moveTo(TicketStatus.CLOSED);
+
+		assertThat(ticket.getResolution()).isEqualTo("Restarted the router");
+	}
+
+	@ParameterizedTest
+	@NullSource
+	@ValueSource(strings = { "", "   " })
+	void resolvingNeedsANote(String note) {
+		ticket.moveTo(TicketStatus.IN_PROGRESS);
+		when(ticketRepository.getOrThrow(ID)).thenReturn(ticket);
+
+		assertThatThrownBy(() -> ticketService.changeStatus(ID, new UpdateStatusRequest(TicketStatus.RESOLVED, note), agent))
+				.isInstanceOf(BadRequestException.class)
+				.hasMessage("A resolution note is required to resolve a ticket");
+
+		assertThat(ticket.getStatus()).isEqualTo(TicketStatus.IN_PROGRESS);
+		verifyNoInteractions(historyService);
+	}
+
+	@Test
+	void responsesIncludeTheSlaResult() {
+		when(ticketRepository.getVisibleOrThrow(ID, agent)).thenReturn(ticket);
+
+		TicketResponse response = ticketService.get(ID, agent);
+
+		assertThat(response.slaDueAt()).isEqualTo(ticket.getCreatedAt().plusSeconds(8 * 3600));
+		assertThat(response.slaState()).isEqualTo(SlaState.OVERDUE);
 	}
 
 	@Test
@@ -263,12 +326,14 @@ class TicketServiceTest {
 		when(ticketRepository.countGroupedByStatus()).thenReturn(rows(TicketStatus.OPEN, 3L));
 		when(ticketRepository.countGroupedByCategory()).thenReturn(rows(TicketCategory.NETWORK, 2L));
 		when(ticketRepository.countGroupedByPriority()).thenReturn(rows(TicketPriority.HIGH, 1L));
+		when(ticketRepository.count(ArgumentMatchers.<Specification<Ticket>>any())).thenReturn(5L);
 
 		TicketStatsResponse stats = ticketService.getStats();
 
 		assertThat(stats.byStatus()).containsEntry(TicketStatus.OPEN, 3L).containsEntry(TicketStatus.CLOSED, 0L);
 		assertThat(stats.byCategory()).containsEntry(TicketCategory.NETWORK, 2L).hasSize(6);
 		assertThat(stats.byPriority()).containsAllEntriesOf(Map.of(TicketPriority.HIGH, 1L, TicketPriority.LOW, 0L));
+		assertThat(stats.overdue()).isEqualTo(5);
 	}
 
 	private void givenTicketCanBeSaved() {

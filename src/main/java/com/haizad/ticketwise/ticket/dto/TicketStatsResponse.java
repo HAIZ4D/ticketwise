@@ -9,5 +9,6 @@ import com.haizad.ticketwise.ticket.TicketStatus;
 public record TicketStatsResponse(
 		Map<TicketStatus, Long> byStatus,
 		Map<TicketCategory, Long> byCategory,
-		Map<TicketPriority, Long> byPriority) {
+		Map<TicketPriority, Long> byPriority,
+		long overdue) {
 }

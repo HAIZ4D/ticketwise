@@ -4,6 +4,8 @@ import java.time.Instant;
 import java.util.List;
 
 import com.haizad.ticketwise.classification.ClassifierSource;
+import com.haizad.ticketwise.ticket.SlaPolicy;
+import com.haizad.ticketwise.ticket.SlaState;
 import com.haizad.ticketwise.ticket.Ticket;
 import com.haizad.ticketwise.ticket.TicketCategory;
 import com.haizad.ticketwise.ticket.TicketPriority;
@@ -26,18 +28,22 @@ public record TicketResponse(
 		boolean overridden,
 		Long assigneeId,
 		String assigneeEmail,
+		Instant slaDueAt,
+		SlaState slaState,
 		Instant createdAt,
 		Instant updatedAt,
-		Instant resolvedAt) {
+		Instant resolvedAt,
+		String resolution) {
 
-	public static TicketResponse from(Ticket ticket) {
+	public static TicketResponse from(Ticket ticket, SlaPolicy slaPolicy, Instant now) {
 		User assignee = ticket.getAssignee();
 		return new TicketResponse(ticket.getId(), ticket.getTitle(), ticket.getDescription(),
 				ticket.getRequester().getEmail(), ticket.getStatus(), ticket.getStatus().nextStatuses(),
 				ticket.getCategory(), ticket.getPriority(), ticket.getAiCategory(), ticket.getAiPriority(),
 				ticket.getAiReason(), ticket.getClassifiedBy(), ticket.isOverridden(),
 				(assignee != null) ? assignee.getId() : null, (assignee != null) ? assignee.getEmail() : null,
-				ticket.getCreatedAt(), ticket.getUpdatedAt(), ticket.getResolvedAt());
+				slaPolicy.dueAt(ticket), slaPolicy.stateOf(ticket, now), ticket.getCreatedAt(), ticket.getUpdatedAt(),
+				ticket.getResolvedAt(), ticket.getResolution());
 	}
 
 }

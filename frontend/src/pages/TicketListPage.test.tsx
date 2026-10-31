@@ -111,6 +111,37 @@ describe('ticket list', () => {
     expect(api.callsTo('GET /tickets')[0].query.has('assigneeId')).toBe(false)
   })
 
+  it('gives staff an overdue filter', async () => {
+    const api = logInAs(agent, onePage)
+    const user = userEvent.setup()
+    renderPage(<App />, '/tickets')
+    await screen.findByRole('heading', { name: 'All tickets' })
+    expect(api.callsTo('GET /tickets')[0].query.has('overdue')).toBe(false)
+
+    await user.click(screen.getByLabelText('Overdue only'))
+
+    await waitFor(() => expect(api.callsTo('GET /tickets').at(-1)?.query.get('overdue')).toBe('true'))
+  })
+
+  it('does not offer the overdue filter to employees, even through the URL', async () => {
+    const api = logInAs(employee, onePage)
+
+    renderPage(<App />, '/tickets?overdue=1')
+
+    await screen.findByRole('heading', { name: 'My tickets' })
+    expect(screen.queryByLabelText('Overdue only')).not.toBeInTheDocument()
+    await waitFor(() => expect(api.callsTo('GET /tickets').length).toBeGreaterThan(0))
+    expect(api.callsTo('GET /tickets')[0].query.has('overdue')).toBe(false)
+  })
+
+  it('shows the SLA state of each ticket', async () => {
+    logInAs(agent, { 'GET /tickets': aPage([aTicket({ slaState: 'OVERDUE' })]) })
+
+    renderPage(<App />, '/tickets')
+
+    expect(await screen.findByText('Overdue')).toBeInTheDocument()
+  })
+
   it('hides the requester column from employees', async () => {
     logInAs(employee, onePage)
 
